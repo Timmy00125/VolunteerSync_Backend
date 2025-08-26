@@ -1,7 +1,7 @@
 .PHONY: run test gen fmt
 
 gen:
-	go run github.com/99designs/gqlgen generate
+	gqlgen generate --verbose
 
 run:
 	go run ./cmd/api
