@@ -1,3 +1,20 @@
+# VolunteerSync Backend
+
+Go + Gin + GraphQL (gqlgen) + PostgreSQL backend.
+
+Highlights:
+
+- Modular architecture (graph, core, store, config)
+- PostgreSQL with migrations (UUID PKs, TIMESTAMPTZ)
+- GraphQL server at /graphql with Playground
+- CORS enabled; health at /healthz
+
+Quick start
+
+- Copy .env.example to .env and adjust values
+- docker compose up -d db
+- go run ./cmd/api
+
 # VolunteerSync - A Modern Volunteer Management Platform
 
 ## 🎯 Project Overview

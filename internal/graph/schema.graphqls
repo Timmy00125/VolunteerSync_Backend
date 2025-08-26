@@ -1,0 +1,28 @@
+scalar Time
+
+type Health {
+  status: String!
+  time: Time!
+}
+
+type User {
+  id: ID!
+  email: String!
+  name: String!
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type Event {
+  id: ID!
+  title: String!
+  description: String
+  startsAt: Time!
+  endsAt: Time!
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type Query {
+  health: Health!
+}
