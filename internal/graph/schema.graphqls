@@ -5,14 +5,25 @@ type Health {
   time: Time!
 }
 
+# Authentication Types
 type User {
   id: ID!
   email: String!
   name: String!
+  emailVerified: Boolean!
+  googleId: String
+  lastLogin: Time
   createdAt: Time!
   updatedAt: Time!
 }
 
+type AuthPayload {
+  token: String!
+  refreshToken: String!
+  user: User!
+}
+
+# Event Types
 type Event {
   id: ID!
   title: String!
@@ -23,6 +34,40 @@ type Event {
   updatedAt: Time!
 }
 
+# Input Types
+input RegisterInput {
+  name: String!
+  email: String!
+  password: String!
+}
+
+input LoginInput {
+  email: String!
+  password: String!
+}
+
+input RefreshTokenInput {
+  refreshToken: String!
+}
+
 type Query {
   health: Health!
+  # Authentication Query
+  me: User
+}
+
+type Mutation {
+  # Authentication Mutations
+  register(input: RegisterInput!): AuthPayload!
+  login(input: LoginInput!): AuthPayload!
+  refreshToken(input: RefreshTokenInput!): AuthPayload!
+  logout: Boolean!
+
+  # Google OAuth URLs and callback
+  googleAuthURL(redirectURL: String!): String!
+  googleCallback(
+    code: String!
+    state: String!
+    redirectURL: String!
+  ): AuthPayload!
 }
