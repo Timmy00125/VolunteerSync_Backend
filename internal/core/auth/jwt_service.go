@@ -94,6 +94,11 @@ func (js *JWTService) GenerateTokenPair(userID, email string, roles []string) (*
 
 	now := time.Now()
 
+	// Ensure roles is not nil
+	if roles == nil {
+		roles = []string{}
+	}
+
 	// Generate access token
 	accessClaims := UserClaims{
 		UserID:    userID,

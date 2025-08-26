@@ -10,6 +10,12 @@ import (
 	"github.com/volunteersync/backend/internal/core/auth"
 )
 
+// AuthService interface defines the authentication methods needed by middleware
+type AuthService interface {
+	ValidateAccessToken(token string) (*auth.UserClaims, error)
+	GetUserByID(ctx context.Context, userID string) (*auth.User, error)
+}
+
 // ContextKey type for context keys to avoid collisions
 type ContextKey string
 
@@ -22,12 +28,12 @@ const (
 
 // AuthMiddleware provides authentication middleware functionality
 type AuthMiddleware struct {
-	authService *auth.AuthService
+	authService AuthService
 	logger      *slog.Logger
 }
 
 // NewAuthMiddleware creates a new authentication middleware
-func NewAuthMiddleware(authService *auth.AuthService, logger *slog.Logger) *AuthMiddleware {
+func NewAuthMiddleware(authService AuthService, logger *slog.Logger) *AuthMiddleware {
 	return &AuthMiddleware{
 		authService: authService,
 		logger:      logger,

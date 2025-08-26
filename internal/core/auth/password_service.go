@@ -86,12 +86,45 @@ func (ps *PasswordService) GetHashCost(hash string) (int, error) {
 
 // ValidatePasswordStrength validates password meets minimum security requirements
 func (ps *PasswordService) ValidatePasswordStrength(password string) error {
+	if password == "" {
+		return fmt.Errorf("password is required")
+	}
+
 	if len(password) < 8 {
 		return fmt.Errorf("password must be at least 8 characters long")
 	}
 
 	if len(password) > 128 {
 		return fmt.Errorf("password must be no more than 128 characters long")
+	}
+
+	// Check for required character types
+	var hasUpper, hasLower, hasNumber, hasSpecial bool
+
+	for _, char := range password {
+		switch {
+		case char >= 'A' && char <= 'Z':
+			hasUpper = true
+		case char >= 'a' && char <= 'z':
+			hasLower = true
+		case char >= '0' && char <= '9':
+			hasNumber = true
+		case char >= '!' && char <= '/' || char >= ':' && char <= '@' || char >= '[' && char <= '`' || char >= '{' && char <= '~':
+			hasSpecial = true
+		}
+	}
+
+	if !hasUpper {
+		return fmt.Errorf("password must contain at least one uppercase letter")
+	}
+	if !hasLower {
+		return fmt.Errorf("password must contain at least one lowercase letter")
+	}
+	if !hasNumber {
+		return fmt.Errorf("password must contain at least one number")
+	}
+	if !hasSpecial {
+		return fmt.Errorf("password must contain at least one special character")
 	}
 
 	// Check for common weak passwords
