@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,9 +18,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/volunteersync/backend/internal/config"
+	authcore "github.com/volunteersync/backend/internal/core/auth"
 	usercore "github.com/volunteersync/backend/internal/core/user"
 	"github.com/volunteersync/backend/internal/graph"
 	"github.com/volunteersync/backend/internal/graph/generated"
+	mw "github.com/volunteersync/backend/internal/middleware"
 	pg "github.com/volunteersync/backend/internal/store/postgres"
 )
 
@@ -128,9 +131,33 @@ func setupRoutes(r *gin.Engine, db *sql.DB, cfg *config.Config) {
 		userSvc = usercore.NewService(store, files, nil, nil)
 	}
 
+	// Wire auth service (uses user store for user lookup and refresh token repo from Postgres store)
+	var authSvc *authcore.AuthService
+	{
+		// For demo, reuse user store for user repo via an adapter implemented on UserStorePG
+		userRepo := pg.NewAuthUserRepository(db)
+		refreshRepo := pg.NewRefreshTokenRepository(db)
+		pwd := authcore.NewPasswordService(12)
+		jwtSvc, err := authcore.NewJWTService(authcore.JWTConfig{
+			AccessSecret:  cfg.JWT.AccessSecret,
+			RefreshSecret: cfg.JWT.RefreshSecret,
+			AccessExpiry:  time.Duration(cfg.JWT.AccessTTLMin) * time.Minute,
+			RefreshExpiry: time.Duration(cfg.JWT.RefreshTTLDays) * 24 * time.Hour,
+			Issuer:        "volunteersync",
+		})
+		if err != nil {
+			log.Fatalf("jwt service: %v", err)
+		}
+		logger := slog.Default()
+		authSvc = authcore.NewAuthService(userRepo, refreshRepo, pwd, jwtSvc, logger)
+	}
+
+	// Auth middleware
+	authMW := mw.NewAuthMiddleware(authSvc, slog.Default())
+
 	gql := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{DB: db, UserService: userSvc}}))
-	r.POST("/graphql", gin.WrapH(gql))
-	r.GET("/graphql", func(c *gin.Context) {
+	r.POST("/graphql", authMW.RequireAuth(), gin.WrapH(gql))
+	r.GET("/graphql", authMW.OptionalAuth(), func(c *gin.Context) {
 		playground.Handler("GraphQL", "/graphql").ServeHTTP(c.Writer, c.Request)
 	})
 }

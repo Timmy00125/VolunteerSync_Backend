@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/volunteersync/backend/internal/core/user"
 )
 
@@ -264,14 +265,137 @@ func (s *UserStorePG) UpdateNotifications(ctx context.Context, userID string, in
 	return in, nil
 }
 func (s *UserStorePG) GetUserRoles(ctx context.Context, userID string) ([]string, error) {
-	return nil, nil
+	rows, err := s.db.QueryContext(ctx, `SELECT role FROM user_roles WHERE user_id=$1`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var roles []string
+	for rows.Next() {
+		var r string
+		if err := rows.Scan(&r); err != nil {
+			return nil, err
+		}
+		roles = append(roles, r)
+	}
+	return roles, rows.Err()
 }
 func (s *UserStorePG) SetUserRoles(ctx context.Context, userID string, roles []string, assignedBy string) error {
-	return nil
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_roles WHERE user_id=$1`, userID); err != nil {
+		return err
+	}
+	if len(roles) > 0 {
+		vals := make([]string, 0, len(roles))
+		args := make([]any, 0, len(roles)+2)
+		args = append(args, userID, assignedBy)
+		for i, role := range roles {
+			// ($1 user_id, $2 role, now, $3 assigned_by) but role position varies
+			vals = append(vals, fmt.Sprintf("($1,$%d,NOW(),$2)", i+3))
+			args = append(args, strings.ToUpper(role))
+		}
+		q := `INSERT INTO user_roles (user_id, role, assigned_at, assigned_by) VALUES ` + strings.Join(vals, ",") + ` ON CONFLICT DO NOTHING`
+		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 func (s *UserStorePG) SearchUsers(ctx context.Context, filter user.UserSearchFilter, limit, offset int) ([]user.UserProfile, error) {
-	// Minimal baseline: return empty set until full search is implemented
-	return []user.UserProfile{}, nil
+	if limit <= 0 {
+		limit = 20
+	}
+	base := `SELECT DISTINCT ON (u.id)
+					u.id, u.name, u.email, u.bio, u.profile_picture_url,
+					u.city, u.state, u.country, u.latitude, u.longitude,
+					u.profile_visibility, u.show_email, u.show_location, u.allow_messaging,
+					u.created_at, u.updated_at, u.last_active_at, u.is_verified
+			 FROM users u`
+	var where []string
+	var args []any
+	ai := 1
+	// Skills filter
+	if len(filter.Skills) > 0 {
+		base += ` JOIN user_skills us ON us.user_id=u.id`
+		where = append(where, fmt.Sprintf("us.name = ANY($%d)", ai))
+		args = append(args, pq.Array(filter.Skills))
+		ai++
+	}
+	// Interests filter
+	if len(filter.InterestIDs) > 0 {
+		base += ` JOIN user_interests ui ON ui.user_id=u.id`
+		where = append(where, fmt.Sprintf("ui.interest_id = ANY($%d::uuid[])", ai))
+		args = append(args, pq.Array(filter.InterestIDs))
+		ai++
+	}
+	// Location filter (basic: match same city/state/country if provided)
+	if filter.Location != nil {
+		loc := filter.Location
+		if loc.City != nil {
+			where = append(where, fmt.Sprintf("u.city ILIKE $%d", ai))
+			args = append(args, *loc.City)
+			ai++
+		}
+		if loc.State != nil {
+			where = append(where, fmt.Sprintf("u.state ILIKE $%d", ai))
+			args = append(args, *loc.State)
+			ai++
+		}
+		if loc.Country != nil {
+			where = append(where, fmt.Sprintf("u.country ILIKE $%d", ai))
+			args = append(args, *loc.Country)
+			ai++
+		}
+	}
+	// Exclude private profiles from search results
+	where = append(where, "u.profile_visibility <> 'PRIVATE'")
+	q := base
+	if len(where) > 0 {
+		q += " WHERE " + strings.Join(where, " AND ")
+	}
+	q += fmt.Sprintf(" ORDER BY u.id, u.name ASC LIMIT $%d OFFSET $%d", ai, ai+1)
+	args = append(args, limit, offset)
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []user.UserProfile
+	for rows.Next() {
+		var (
+			id, name, email                   string
+			bio, pic, city, state, country    sql.NullString
+			lat, lng                          sql.NullFloat64
+			visibility                        string
+			showEmail, showLocation, allowMsg bool
+			createdAt, updatedAt              time.Time
+			lastActive                        sql.NullTime
+			isVerified                        bool
+		)
+		if err := rows.Scan(&id, &name, &email, &bio, &pic, &city, &state, &country, &lat, &lng,
+			&visibility, &showEmail, &showLocation, &allowMsg,
+			&createdAt, &updatedAt, &lastActive, &isVerified); err != nil {
+			return nil, err
+		}
+		prof := user.UserProfile{
+			ID: id, Name: name, Email: email, Bio: nullStringPtr(bio), ProfilePictureURL: nullStringPtr(pic),
+			Privacy:   user.PrivacySettings{ProfileVisibility: strings.ToUpper(visibility), ShowEmail: showEmail, ShowLocation: showLocation, AllowMessaging: allowMsg},
+			CreatedAt: createdAt, UpdatedAt: updatedAt, LastActiveAt: nullTimePtr(lastActive), IsVerified: isVerified,
+		}
+		if city.Valid || state.Valid || country.Valid || lat.Valid || lng.Valid {
+			prof.Location = &user.Location{City: nullStringPtr(city), State: nullStringPtr(state), Country: nullStringPtr(country), Lat: nullFloatPtr(lat), Lng: nullFloatPtr(lng)}
+		}
+		out = append(out, prof)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 func (s *UserStorePG) LogActivity(ctx context.Context, l user.ActivityLog) error {
 	var detailsJSON any

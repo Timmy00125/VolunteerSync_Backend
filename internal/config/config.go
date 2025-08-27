@@ -33,6 +33,13 @@ type Config struct {
 		BaseURL string `mapstructure:"UPLOADS_BASE_URL"`
 		MaxMB   int    `mapstructure:"UPLOADS_MAX_MB"`
 	} `mapstructure:",squash"`
+
+	JWT struct {
+		AccessSecret   string `mapstructure:"JWT_ACCESS_SECRET"`
+		RefreshSecret  string `mapstructure:"JWT_REFRESH_SECRET"`
+		AccessTTLMin   int    `mapstructure:"JWT_ACCESS_TTL_MINUTES"`
+		RefreshTTLDays int    `mapstructure:"JWT_REFRESH_TTL_DAYS"`
+	} `mapstructure:",squash"`
 }
 
 // Load loads the configuration with sane defaults and environment overrides.
@@ -63,6 +70,12 @@ func Load() (*Config, error) {
 	v.SetDefault("UPLOADS_BASE_DIR", "./uploads")
 	v.SetDefault("UPLOADS_BASE_URL", "/uploads")
 	v.SetDefault("UPLOADS_MAX_MB", 5)
+
+	// JWT defaults (development-safe but should be overridden in production)
+	v.SetDefault("JWT_ACCESS_SECRET", "dev_access_secret_change_me")
+	v.SetDefault("JWT_REFRESH_SECRET", "dev_refresh_secret_change_me")
+	v.SetDefault("JWT_ACCESS_TTL_MINUTES", 15)
+	v.SetDefault("JWT_REFRESH_TTL_DAYS", 7)
 
 	// Load .env if present, ignore if missing
 	_ = v.ReadInConfig()

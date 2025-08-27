@@ -225,7 +225,17 @@ func (s *Service) ListActivityLogs(ctx context.Context, userID string, limit, of
 
 // SearchUsers returns profiles matching filter.
 func (s *Service) SearchUsers(ctx context.Context, filter UserSearchFilter, limit, offset int) ([]UserProfile, error) {
-	return s.store.SearchUsers(ctx, filter, limit, offset)
+	res, err := s.store.SearchUsers(ctx, filter, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	// Apply privacy filtering for public search results (no requester context)
+	out := make([]UserProfile, 0, len(res))
+	for _, p := range res {
+		fp := filterProfileByPrivacy(p, "", nil)
+		out = append(out, fp)
+	}
+	return out, nil
 }
 
 // Helper: filter profile fields based on privacy and requester roles.
