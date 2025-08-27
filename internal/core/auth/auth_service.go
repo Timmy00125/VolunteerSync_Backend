@@ -250,7 +250,7 @@ func (as *AuthService) generateAuthResponse(ctx context.Context, user *User, rol
 		return nil, fmt.Errorf("failed to store refresh token")
 	}
 
-	as.logger.Info("authentication successful", "user_id", user.ID, "email", user.Email)
+	as.logger.Info("auth tokens generated successfully", "user_id", user.ID, "email", user.Email)
 
 	return &AuthResponse{
 		AccessToken:  tokenPair.AccessToken,
