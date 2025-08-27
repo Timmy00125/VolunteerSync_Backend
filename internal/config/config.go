@@ -27,6 +27,12 @@ type Config struct {
 		AllowMethods []string `mapstructure:"CORS_ALLOW_METHODS"`
 		AllowHeaders []string `mapstructure:"CORS_ALLOW_HEADERS"`
 	} `mapstructure:",squash"`
+
+	Uploads struct {
+		BaseDir string `mapstructure:"UPLOADS_BASE_DIR"`
+		BaseURL string `mapstructure:"UPLOADS_BASE_URL"`
+		MaxMB   int    `mapstructure:"UPLOADS_MAX_MB"`
+	} `mapstructure:",squash"`
 }
 
 // Load loads the configuration with sane defaults and environment overrides.
@@ -52,6 +58,11 @@ func Load() (*Config, error) {
 	v.SetDefault("CORS_ALLOW_ORIGINS", []string{"*"})
 	v.SetDefault("CORS_ALLOW_METHODS", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"})
 	v.SetDefault("CORS_ALLOW_HEADERS", []string{"Authorization", "Content-Type"})
+
+	// Uploads defaults
+	v.SetDefault("UPLOADS_BASE_DIR", "./uploads")
+	v.SetDefault("UPLOADS_BASE_URL", "/uploads")
+	v.SetDefault("UPLOADS_MAX_MB", 5)
 
 	// Load .env if present, ignore if missing
 	_ = v.ReadInConfig()

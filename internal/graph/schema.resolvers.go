@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/99designs/gqlgen/graphql"
 	"github.com/volunteersync/backend/internal/graph/generated"
 	"github.com/volunteersync/backend/internal/graph/model"
 )
@@ -42,6 +43,56 @@ func (r *mutationResolver) GoogleCallback(ctx context.Context, code string, stat
 	panic(fmt.Errorf("not implemented: GoogleCallback - googleCallback"))
 }
 
+// UpdateProfile is the resolver for the updateProfile field.
+func (r *mutationResolver) UpdateProfile(ctx context.Context, input model.UpdateProfileInput) (*model.User, error) {
+	panic(fmt.Errorf("not implemented: UpdateProfile - updateProfile"))
+}
+
+// UploadProfilePicture is the resolver for the uploadProfilePicture field.
+func (r *mutationResolver) UploadProfilePicture(ctx context.Context, file graphql.Upload) (string, error) {
+	panic(fmt.Errorf("not implemented: UploadProfilePicture - uploadProfilePicture"))
+}
+
+// UpdateInterests is the resolver for the updateInterests field.
+func (r *mutationResolver) UpdateInterests(ctx context.Context, input model.InterestInput) (*model.User, error) {
+	panic(fmt.Errorf("not implemented: UpdateInterests - updateInterests"))
+}
+
+// AddSkill is the resolver for the addSkill field.
+func (r *mutationResolver) AddSkill(ctx context.Context, input model.SkillInput) (*model.User, error) {
+	panic(fmt.Errorf("not implemented: AddSkill - addSkill"))
+}
+
+// RemoveSkill is the resolver for the removeSkill field.
+func (r *mutationResolver) RemoveSkill(ctx context.Context, skillID string) (*model.User, error) {
+	panic(fmt.Errorf("not implemented: RemoveSkill - removeSkill"))
+}
+
+// UpdatePrivacySettings is the resolver for the updatePrivacySettings field.
+func (r *mutationResolver) UpdatePrivacySettings(ctx context.Context, input model.PrivacySettingsInput) (*model.User, error) {
+	panic(fmt.Errorf("not implemented: UpdatePrivacySettings - updatePrivacySettings"))
+}
+
+// UpdateNotificationPreferences is the resolver for the updateNotificationPreferences field.
+func (r *mutationResolver) UpdateNotificationPreferences(ctx context.Context, input model.NotificationPreferencesInput) (*model.User, error) {
+	panic(fmt.Errorf("not implemented: UpdateNotificationPreferences - updateNotificationPreferences"))
+}
+
+// ChangePassword is the resolver for the changePassword field.
+func (r *mutationResolver) ChangePassword(ctx context.Context, currentPassword string, newPassword string) (bool, error) {
+	panic(fmt.Errorf("not implemented: ChangePassword - changePassword"))
+}
+
+// DeactivateAccount is the resolver for the deactivateAccount field.
+func (r *mutationResolver) DeactivateAccount(ctx context.Context, confirmationCode string) (bool, error) {
+	panic(fmt.Errorf("not implemented: DeactivateAccount - deactivateAccount"))
+}
+
+// ExportUserData is the resolver for the exportUserData field.
+func (r *mutationResolver) ExportUserData(ctx context.Context) (string, error) {
+	panic(fmt.Errorf("not implemented: ExportUserData - exportUserData"))
+}
+
 // Health is the resolver for the health field.
 func (r *queryResolver) Health(ctx context.Context) (*model.Health, error) {
 	panic(fmt.Errorf("not implemented: Health - health"))
@@ -50,6 +101,49 @@ func (r *queryResolver) Health(ctx context.Context) (*model.Health, error) {
 // Me is the resolver for the me field.
 func (r *queryResolver) Me(ctx context.Context) (*model.User, error) {
 	panic(fmt.Errorf("not implemented: Me - me"))
+}
+
+// User is the resolver for the user field.
+func (r *queryResolver) User(ctx context.Context, id string) (*model.PublicProfile, error) {
+	panic(fmt.Errorf("not implemented: User - user"))
+}
+
+// SearchUsers is the resolver for the searchUsers field.
+func (r *queryResolver) SearchUsers(ctx context.Context, filter model.UserSearchFilter, limit *int, offset *int) ([]*model.PublicProfile, error) {
+	panic(fmt.Errorf("not implemented: SearchUsers - searchUsers"))
+}
+
+// Interests is the resolver for the interests field.
+func (r *queryResolver) Interests(ctx context.Context) ([]*model.Interest, error) {
+	if r.UserService == nil {
+		return nil, fmt.Errorf("service unavailable")
+	}
+	ints, err := r.UserService.ListInterests(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*model.Interest, 0, len(ints))
+	for _, it := range ints {
+		out = append(out, &model.Interest{ID: it.ID, Name: it.Name, Category: model.InterestCategory(it.Category)})
+	}
+	return out, nil
+}
+
+// UserActivity is the resolver for the userActivity field.
+func (r *queryResolver) UserActivity(ctx context.Context) ([]*model.ActivityLog, error) {
+	if r.UserService == nil {
+		return nil, fmt.Errorf("service unavailable")
+	}
+	// TODO: get userID from context once auth is integrated here
+	logs, err := r.UserService.ListActivityLogs(ctx, "", 50, 0)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*model.ActivityLog, 0, len(logs))
+	for _, l := range logs {
+		out = append(out, &model.ActivityLog{ID: l.ID, Action: l.Action, CreatedAt: l.CreatedAt})
+	}
+	return out, nil
 }
 
 // Mutation returns generated.MutationResolver implementation.

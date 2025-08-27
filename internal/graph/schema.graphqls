@@ -1,4 +1,5 @@
 scalar Time
+scalar Upload
 
 type Health {
   status: String!
@@ -15,6 +16,18 @@ type User {
   lastLogin: Time
   createdAt: Time!
   updatedAt: Time!
+
+  # Phase 3 fields
+  bio: String
+  location: Location
+  profilePicture: String
+  interests: [Interest!]!
+  skills: [Skill!]!
+  roles: [String!]!
+  isVerified: Boolean!
+  joinedAt: Time!
+  lastActiveAt: Time
+  publicProfile: PublicProfile!
 }
 
 type AuthPayload {
@@ -34,6 +47,64 @@ type Event {
   updatedAt: Time!
 }
 
+# Phase 3 types
+type PublicProfile {
+  id: ID!
+  name: String!
+  bio: String
+  location: Location
+  profilePicture: String
+  interests: [Interest!]!
+  skills: [Skill!]!
+  volunteerStats: VolunteerStats!
+}
+
+type VolunteerStats {
+  hours: Int!
+  eventsParticipated: Int!
+}
+
+type Interest {
+  id: ID!
+  name: String!
+  category: InterestCategory!
+}
+
+type Skill {
+  id: ID!
+  name: String!
+  proficiency: SkillProficiency!
+  verified: Boolean!
+}
+
+type Location {
+  city: String
+  state: String
+  country: String
+  coordinates: Coordinates
+}
+
+type Coordinates {
+  lat: Float!
+  lng: Float!
+}
+
+type PrivacySettings {
+  profileVisibility: ProfileVisibility!
+  showEmail: Boolean!
+  showLocation: Boolean!
+  allowMessaging: Boolean!
+}
+
+type NotificationPreferences {
+  emailNotifications: Boolean!
+  pushNotifications: Boolean!
+  smsNotifications: Boolean!
+  eventReminders: Boolean!
+  newOpportunities: Boolean!
+  newsletterSubscription: Boolean!
+}
+
 # Input Types
 input RegisterInput {
   name: String!
@@ -50,10 +121,103 @@ input RefreshTokenInput {
   refreshToken: String!
 }
 
+# Phase 3 inputs
+input UpdateProfileInput {
+  name: String
+  bio: String
+  location: LocationInput
+}
+
+input LocationInput {
+  city: String
+  state: String
+  country: String
+  lat: Float
+  lng: Float
+}
+
+input InterestInput {
+  interestIds: [ID!]!
+}
+
+input SkillInput {
+  name: String!
+  proficiency: SkillProficiency!
+}
+
+input PrivacySettingsInput {
+  profileVisibility: ProfileVisibility
+  showEmail: Boolean
+  showLocation: Boolean
+  allowMessaging: Boolean
+}
+
+input NotificationPreferencesInput {
+  emailNotifications: Boolean
+  pushNotifications: Boolean
+  smsNotifications: Boolean
+  eventReminders: Boolean
+  newOpportunities: Boolean
+  newsletterSubscription: Boolean
+}
+
+input UserSearchFilter {
+  skills: [String!]
+  interests: [ID!]
+  location: LocationInput
+  availability: AvailabilityStatus
+  experience: ExperienceLevel
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  BUSY
+  AWAY
+}
+
+enum ExperienceLevel {
+  JUNIOR
+  MID
+  SENIOR
+}
+
+enum ProfileVisibility {
+  PUBLIC
+  VOLUNTEERS_ONLY
+  PRIVATE
+}
+
+enum SkillProficiency {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum InterestCategory {
+  ENVIRONMENT
+  EDUCATION
+  HEALTH
+  COMMUNITY
+  TECHNOLOGY
+  ARTS
+  SPORTS
+  ANIMALS
+}
+
 type Query {
   health: Health!
   # Authentication Query
   me: User
+  # Phase 3 Queries
+  user(id: ID!): PublicProfile
+  searchUsers(
+    filter: UserSearchFilter!
+    limit: Int
+    offset: Int
+  ): [PublicProfile!]!
+  interests: [Interest!]!
+  userActivity: [ActivityLog!]!
 }
 
 type Mutation {
@@ -70,4 +234,25 @@ type Mutation {
     state: String!
     redirectURL: String!
   ): AuthPayload!
+
+  # Phase 3 Mutations
+  updateProfile(input: UpdateProfileInput!): User!
+  uploadProfilePicture(file: Upload!): String!
+  updateInterests(input: InterestInput!): User!
+  addSkill(input: SkillInput!): User!
+  removeSkill(skillId: ID!): User!
+  updatePrivacySettings(input: PrivacySettingsInput!): User!
+  updateNotificationPreferences(input: NotificationPreferencesInput!): User!
+  changePassword(currentPassword: String!, newPassword: String!): Boolean!
+  deactivateAccount(confirmationCode: String!): Boolean!
+  exportUserData: String!
+}
+
+# Additional types used by queries
+type ActivityLog {
+  id: ID!
+  action: String!
+  ipAddress: String
+  userAgent: String
+  createdAt: Time!
 }

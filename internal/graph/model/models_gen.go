@@ -3,13 +3,30 @@
 package model
 
 import (
+	"bytes"
+	"fmt"
+	"io"
+	"strconv"
 	"time"
 )
+
+type ActivityLog struct {
+	ID        string    `json:"id"`
+	Action    string    `json:"action"`
+	IPAddress *string   `json:"ipAddress,omitempty"`
+	UserAgent *string   `json:"userAgent,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+}
 
 type AuthPayload struct {
 	Token        string `json:"token"`
 	RefreshToken string `json:"refreshToken"`
 	User         *User  `json:"user"`
+}
+
+type Coordinates struct {
+	Lat float64 `json:"lat"`
+	Lng float64 `json:"lng"`
 }
 
 type Event struct {
@@ -27,12 +44,80 @@ type Health struct {
 	Time   time.Time `json:"time"`
 }
 
+type Interest struct {
+	ID       string           `json:"id"`
+	Name     string           `json:"name"`
+	Category InterestCategory `json:"category"`
+}
+
+type InterestInput struct {
+	InterestIds []string `json:"interestIds"`
+}
+
+type Location struct {
+	City        *string      `json:"city,omitempty"`
+	State       *string      `json:"state,omitempty"`
+	Country     *string      `json:"country,omitempty"`
+	Coordinates *Coordinates `json:"coordinates,omitempty"`
+}
+
+type LocationInput struct {
+	City    *string  `json:"city,omitempty"`
+	State   *string  `json:"state,omitempty"`
+	Country *string  `json:"country,omitempty"`
+	Lat     *float64 `json:"lat,omitempty"`
+	Lng     *float64 `json:"lng,omitempty"`
+}
+
 type LoginInput struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
 type Mutation struct {
+}
+
+type NotificationPreferences struct {
+	EmailNotifications     bool `json:"emailNotifications"`
+	PushNotifications      bool `json:"pushNotifications"`
+	SmsNotifications       bool `json:"smsNotifications"`
+	EventReminders         bool `json:"eventReminders"`
+	NewOpportunities       bool `json:"newOpportunities"`
+	NewsletterSubscription bool `json:"newsletterSubscription"`
+}
+
+type NotificationPreferencesInput struct {
+	EmailNotifications     *bool `json:"emailNotifications,omitempty"`
+	PushNotifications      *bool `json:"pushNotifications,omitempty"`
+	SmsNotifications       *bool `json:"smsNotifications,omitempty"`
+	EventReminders         *bool `json:"eventReminders,omitempty"`
+	NewOpportunities       *bool `json:"newOpportunities,omitempty"`
+	NewsletterSubscription *bool `json:"newsletterSubscription,omitempty"`
+}
+
+type PrivacySettings struct {
+	ProfileVisibility ProfileVisibility `json:"profileVisibility"`
+	ShowEmail         bool              `json:"showEmail"`
+	ShowLocation      bool              `json:"showLocation"`
+	AllowMessaging    bool              `json:"allowMessaging"`
+}
+
+type PrivacySettingsInput struct {
+	ProfileVisibility *ProfileVisibility `json:"profileVisibility,omitempty"`
+	ShowEmail         *bool              `json:"showEmail,omitempty"`
+	ShowLocation      *bool              `json:"showLocation,omitempty"`
+	AllowMessaging    *bool              `json:"allowMessaging,omitempty"`
+}
+
+type PublicProfile struct {
+	ID             string          `json:"id"`
+	Name           string          `json:"name"`
+	Bio            *string         `json:"bio,omitempty"`
+	Location       *Location       `json:"location,omitempty"`
+	ProfilePicture *string         `json:"profilePicture,omitempty"`
+	Interests      []*Interest     `json:"interests"`
+	Skills         []*Skill        `json:"skills"`
+	VolunteerStats *VolunteerStats `json:"volunteerStats"`
 }
 
 type Query struct {
@@ -48,13 +133,351 @@ type RegisterInput struct {
 	Password string `json:"password"`
 }
 
+type Skill struct {
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Proficiency SkillProficiency `json:"proficiency"`
+	Verified    bool             `json:"verified"`
+}
+
+type SkillInput struct {
+	Name        string           `json:"name"`
+	Proficiency SkillProficiency `json:"proficiency"`
+}
+
+type UpdateProfileInput struct {
+	Name     *string        `json:"name,omitempty"`
+	Bio      *string        `json:"bio,omitempty"`
+	Location *LocationInput `json:"location,omitempty"`
+}
+
 type User struct {
-	ID            string     `json:"id"`
-	Email         string     `json:"email"`
-	Name          string     `json:"name"`
-	EmailVerified bool       `json:"emailVerified"`
-	GoogleID      *string    `json:"googleId,omitempty"`
-	LastLogin     *time.Time `json:"lastLogin,omitempty"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
+	ID             string         `json:"id"`
+	Email          string         `json:"email"`
+	Name           string         `json:"name"`
+	EmailVerified  bool           `json:"emailVerified"`
+	GoogleID       *string        `json:"googleId,omitempty"`
+	LastLogin      *time.Time     `json:"lastLogin,omitempty"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
+	Bio            *string        `json:"bio,omitempty"`
+	Location       *Location      `json:"location,omitempty"`
+	ProfilePicture *string        `json:"profilePicture,omitempty"`
+	Interests      []*Interest    `json:"interests"`
+	Skills         []*Skill       `json:"skills"`
+	Roles          []string       `json:"roles"`
+	IsVerified     bool           `json:"isVerified"`
+	JoinedAt       time.Time      `json:"joinedAt"`
+	LastActiveAt   *time.Time     `json:"lastActiveAt,omitempty"`
+	PublicProfile  *PublicProfile `json:"publicProfile"`
+}
+
+type UserSearchFilter struct {
+	Skills       []string            `json:"skills,omitempty"`
+	Interests    []string            `json:"interests,omitempty"`
+	Location     *LocationInput      `json:"location,omitempty"`
+	Availability *AvailabilityStatus `json:"availability,omitempty"`
+	Experience   *ExperienceLevel    `json:"experience,omitempty"`
+}
+
+type VolunteerStats struct {
+	Hours              int `json:"hours"`
+	EventsParticipated int `json:"eventsParticipated"`
+}
+
+type AvailabilityStatus string
+
+const (
+	AvailabilityStatusAvailable AvailabilityStatus = "AVAILABLE"
+	AvailabilityStatusBusy      AvailabilityStatus = "BUSY"
+	AvailabilityStatusAway      AvailabilityStatus = "AWAY"
+)
+
+var AllAvailabilityStatus = []AvailabilityStatus{
+	AvailabilityStatusAvailable,
+	AvailabilityStatusBusy,
+	AvailabilityStatusAway,
+}
+
+func (e AvailabilityStatus) IsValid() bool {
+	switch e {
+	case AvailabilityStatusAvailable, AvailabilityStatusBusy, AvailabilityStatusAway:
+		return true
+	}
+	return false
+}
+
+func (e AvailabilityStatus) String() string {
+	return string(e)
+}
+
+func (e *AvailabilityStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = AvailabilityStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid AvailabilityStatus", str)
+	}
+	return nil
+}
+
+func (e AvailabilityStatus) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *AvailabilityStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e AvailabilityStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type ExperienceLevel string
+
+const (
+	ExperienceLevelJunior ExperienceLevel = "JUNIOR"
+	ExperienceLevelMid    ExperienceLevel = "MID"
+	ExperienceLevelSenior ExperienceLevel = "SENIOR"
+)
+
+var AllExperienceLevel = []ExperienceLevel{
+	ExperienceLevelJunior,
+	ExperienceLevelMid,
+	ExperienceLevelSenior,
+}
+
+func (e ExperienceLevel) IsValid() bool {
+	switch e {
+	case ExperienceLevelJunior, ExperienceLevelMid, ExperienceLevelSenior:
+		return true
+	}
+	return false
+}
+
+func (e ExperienceLevel) String() string {
+	return string(e)
+}
+
+func (e *ExperienceLevel) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ExperienceLevel(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ExperienceLevel", str)
+	}
+	return nil
+}
+
+func (e ExperienceLevel) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ExperienceLevel) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ExperienceLevel) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type InterestCategory string
+
+const (
+	InterestCategoryEnvironment InterestCategory = "ENVIRONMENT"
+	InterestCategoryEducation   InterestCategory = "EDUCATION"
+	InterestCategoryHealth      InterestCategory = "HEALTH"
+	InterestCategoryCommunity   InterestCategory = "COMMUNITY"
+	InterestCategoryTechnology  InterestCategory = "TECHNOLOGY"
+	InterestCategoryArts        InterestCategory = "ARTS"
+	InterestCategorySports      InterestCategory = "SPORTS"
+	InterestCategoryAnimals     InterestCategory = "ANIMALS"
+)
+
+var AllInterestCategory = []InterestCategory{
+	InterestCategoryEnvironment,
+	InterestCategoryEducation,
+	InterestCategoryHealth,
+	InterestCategoryCommunity,
+	InterestCategoryTechnology,
+	InterestCategoryArts,
+	InterestCategorySports,
+	InterestCategoryAnimals,
+}
+
+func (e InterestCategory) IsValid() bool {
+	switch e {
+	case InterestCategoryEnvironment, InterestCategoryEducation, InterestCategoryHealth, InterestCategoryCommunity, InterestCategoryTechnology, InterestCategoryArts, InterestCategorySports, InterestCategoryAnimals:
+		return true
+	}
+	return false
+}
+
+func (e InterestCategory) String() string {
+	return string(e)
+}
+
+func (e *InterestCategory) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = InterestCategory(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid InterestCategory", str)
+	}
+	return nil
+}
+
+func (e InterestCategory) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *InterestCategory) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e InterestCategory) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type ProfileVisibility string
+
+const (
+	ProfileVisibilityPublic         ProfileVisibility = "PUBLIC"
+	ProfileVisibilityVolunteersOnly ProfileVisibility = "VOLUNTEERS_ONLY"
+	ProfileVisibilityPrivate        ProfileVisibility = "PRIVATE"
+)
+
+var AllProfileVisibility = []ProfileVisibility{
+	ProfileVisibilityPublic,
+	ProfileVisibilityVolunteersOnly,
+	ProfileVisibilityPrivate,
+}
+
+func (e ProfileVisibility) IsValid() bool {
+	switch e {
+	case ProfileVisibilityPublic, ProfileVisibilityVolunteersOnly, ProfileVisibilityPrivate:
+		return true
+	}
+	return false
+}
+
+func (e ProfileVisibility) String() string {
+	return string(e)
+}
+
+func (e *ProfileVisibility) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ProfileVisibility(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ProfileVisibility", str)
+	}
+	return nil
+}
+
+func (e ProfileVisibility) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ProfileVisibility) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ProfileVisibility) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type SkillProficiency string
+
+const (
+	SkillProficiencyBeginner     SkillProficiency = "BEGINNER"
+	SkillProficiencyIntermediate SkillProficiency = "INTERMEDIATE"
+	SkillProficiencyAdvanced     SkillProficiency = "ADVANCED"
+	SkillProficiencyExpert       SkillProficiency = "EXPERT"
+)
+
+var AllSkillProficiency = []SkillProficiency{
+	SkillProficiencyBeginner,
+	SkillProficiencyIntermediate,
+	SkillProficiencyAdvanced,
+	SkillProficiencyExpert,
+}
+
+func (e SkillProficiency) IsValid() bool {
+	switch e {
+	case SkillProficiencyBeginner, SkillProficiencyIntermediate, SkillProficiencyAdvanced, SkillProficiencyExpert:
+		return true
+	}
+	return false
+}
+
+func (e SkillProficiency) String() string {
+	return string(e)
+}
+
+func (e *SkillProficiency) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SkillProficiency(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SkillProficiency", str)
+	}
+	return nil
+}
+
+func (e SkillProficiency) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SkillProficiency) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SkillProficiency) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/volunteersync/backend/internal/config"
+	usercore "github.com/volunteersync/backend/internal/core/user"
 	"github.com/volunteersync/backend/internal/graph"
 	"github.com/volunteersync/backend/internal/graph/generated"
 	pg "github.com/volunteersync/backend/internal/store/postgres"
@@ -80,7 +81,7 @@ func setupHTTPServer(cfg *config.Config, db *sql.DB) (*http.Server, error) {
 	setupCORS(r, cfg)
 
 	// Setup routes
-	setupRoutes(r, db)
+	setupRoutes(r, db, cfg)
 
 	return &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
@@ -100,7 +101,7 @@ func setupCORS(r *gin.Engine, cfg *config.Config) {
 }
 
 // setupRoutes configures all application routes
-func setupRoutes(r *gin.Engine, db *sql.DB) {
+func setupRoutes(r *gin.Engine, db *sql.DB, cfg *config.Config) {
 	// Health endpoint
 	r.GET("/healthz", func(c *gin.Context) {
 		if err := db.Ping(); err != nil {
@@ -110,8 +111,24 @@ func setupRoutes(r *gin.Engine, db *sql.DB) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	// Static uploads - local file service
+	if cfg.Uploads.BaseURL != "" && cfg.Uploads.BaseDir != "" {
+		r.Static(cfg.Uploads.BaseURL, cfg.Uploads.BaseDir)
+	}
+
 	// GraphQL server
-	gql := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{DB: db}}))
+	// Wire user service
+	var userSvc *usercore.Service
+	{
+		// local file service
+		maxBytes := int64(cfg.Uploads.MaxMB) * 1024 * 1024
+		files := usercore.NewLocalFileService(cfg.Uploads.BaseDir, cfg.Uploads.BaseURL, maxBytes)
+		// Postgres user store
+		store := pg.NewUserStore(db)
+		userSvc = usercore.NewService(store, files, nil, nil)
+	}
+
+	gql := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{DB: db, UserService: userSvc}}))
 	r.POST("/graphql", gin.WrapH(gql))
 	r.GET("/graphql", func(c *gin.Context) {
 		playground.Handler("GraphQL", "/graphql").ServeHTTP(c.Writer, c.Request)
