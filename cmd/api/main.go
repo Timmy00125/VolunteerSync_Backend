@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -22,38 +23,73 @@ import (
 )
 
 func main() {
+	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
 
-	// Connect DB and run migrations
-	db, err := pg.Open(pg.DBOptions{
-		Host:     cfg.DB.Host,
-		Port:     cfg.DB.Port,
-		User:     cfg.DB.User,
-		Password: cfg.DB.Password,
-		Name:     cfg.DB.Name,
-		SSLMode:  cfg.DB.SSLMode,
-	})
+	// Setup database
+	db, err := setupDatabase(cfg)
 	if err != nil {
-		log.Fatalf("db open: %v", err)
+		log.Fatalf("database setup: %v", err)
 	}
 	defer db.Close()
 
-	if err := pg.MigrateUp(pg.DBOptions{
+	// Setup HTTP server
+	srv, err := setupHTTPServer(cfg, db)
+	if err != nil {
+		log.Fatalf("server setup: %v", err)
+	}
+
+	// Start server and handle graceful shutdown
+	startServerWithGracefulShutdown(srv, cfg)
+}
+
+// setupDatabase connects to the database and runs migrations
+func setupDatabase(cfg *config.Config) (*sql.DB, error) {
+	dbOptions := pg.DBOptions{
 		Host:     cfg.DB.Host,
 		Port:     cfg.DB.Port,
 		User:     cfg.DB.User,
 		Password: cfg.DB.Password,
 		Name:     cfg.DB.Name,
 		SSLMode:  cfg.DB.SSLMode,
-	}); err != nil {
-		log.Fatalf("migrations: %v", err)
 	}
 
+	// Connect to database
+	db, err := pg.Open(dbOptions)
+	if err != nil {
+		return nil, fmt.Errorf("db open: %w", err)
+	}
+
+	// Run migrations
+	if err := pg.MigrateUp(dbOptions); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrations: %w", err)
+	}
+
+	return db, nil
+}
+
+// setupHTTPServer creates and configures the HTTP server
+func setupHTTPServer(cfg *config.Config, db *sql.DB) (*http.Server, error) {
 	r := gin.Default()
 
+	// Setup CORS
+	setupCORS(r, cfg)
+
+	// Setup routes
+	setupRoutes(r, db)
+
+	return &http.Server{
+		Addr:    fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		Handler: r,
+	}, nil
+}
+
+// setupCORS configures CORS middleware
+func setupCORS(r *gin.Engine, cfg *config.Config) {
 	corsCfg := cors.Config{
 		AllowOrigins: cfg.CORS.AllowOrigins,
 		AllowMethods: cfg.CORS.AllowMethods,
@@ -61,7 +97,10 @@ func main() {
 	}
 	corsCfg.AllowCredentials = true
 	r.Use(cors.New(corsCfg))
+}
 
+// setupRoutes configures all application routes
+func setupRoutes(r *gin.Engine, db *sql.DB) {
 	// Health endpoint
 	r.GET("/healthz", func(c *gin.Context) {
 		if err := db.Ping(); err != nil {
@@ -77,12 +116,11 @@ func main() {
 	r.GET("/graphql", func(c *gin.Context) {
 		playground.Handler("GraphQL", "/graphql").ServeHTTP(c.Writer, c.Request)
 	})
+}
 
-	srv := &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-		Handler: r,
-	}
-
+// startServerWithGracefulShutdown starts the server and handles graceful shutdown
+func startServerWithGracefulShutdown(srv *http.Server, cfg *config.Config) {
+	// Start server in a goroutine
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %v", err)
@@ -90,7 +128,7 @@ func main() {
 	}()
 	log.Printf("server started on http://%s:%d", cfg.Host, cfg.Port)
 
-	// graceful shutdown
+	// Setup graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit

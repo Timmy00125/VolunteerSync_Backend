@@ -38,73 +38,23 @@ func NewAuthService(
 
 // Register creates a new user account
 func (as *AuthService) Register(ctx context.Context, req *RegisterRequest) (*AuthResponse, error) {
-	// Validate input
+	// Validate input and check availability
 	if err := as.validateRegisterRequest(req); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
 
-	// Check if email already exists
-	exists, err := as.userRepo.EmailExists(ctx, req.Email)
+	if err := as.checkEmailAvailability(ctx, req.Email); err != nil {
+		return nil, err
+	}
+
+	// Create and store user
+	user, err := as.createUserFromRequest(ctx, req)
 	if err != nil {
-		as.logger.Error("failed to check email existence", "email", req.Email, "error", err)
-		return nil, fmt.Errorf("failed to check email availability")
-	}
-	if exists {
-		return nil, fmt.Errorf("email address already registered")
+		return nil, err
 	}
 
-	// Validate password strength
-	if err := as.passwordService.ValidatePasswordStrength(req.Password); err != nil {
-		return nil, fmt.Errorf("password validation failed: %w", err)
-	}
-
-	// Hash password
-	hashedPassword, err := as.passwordService.HashPassword(req.Password)
-	if err != nil {
-		as.logger.Error("failed to hash password", "error", err)
-		return nil, fmt.Errorf("failed to process password")
-	}
-
-	// Create user
-	user := &User{
-		ID:                  uuid.New().String(),
-		Email:               strings.ToLower(strings.TrimSpace(req.Email)),
-		Name:                strings.TrimSpace(req.Name),
-		PasswordHash:        &hashedPassword,
-		EmailVerified:       false,
-		FailedLoginAttempts: 0,
-		CreatedAt:           time.Now(),
-		UpdatedAt:           time.Now(),
-	}
-
-	err = as.userRepo.CreateUser(ctx, user)
-	if err != nil {
-		as.logger.Error("failed to create user", "email", req.Email, "error", err)
-		return nil, fmt.Errorf("failed to create user account")
-	}
-
-	// Generate tokens
-	tokenPair, err := as.jwtService.GenerateTokenPair(user.ID, user.Email, []string{"user"})
-	if err != nil {
-		as.logger.Error("failed to generate tokens", "user_id", user.ID, "error", err)
-		return nil, fmt.Errorf("failed to generate authentication tokens")
-	}
-
-	// Store refresh token
-	err = as.storeRefreshToken(ctx, user.ID, tokenPair.RefreshToken)
-	if err != nil {
-		as.logger.Error("failed to store refresh token", "user_id", user.ID, "error", err)
-		return nil, fmt.Errorf("failed to store refresh token")
-	}
-
-	as.logger.Info("user registered successfully", "user_id", user.ID, "email", user.Email)
-
-	return &AuthResponse{
-		AccessToken:  tokenPair.AccessToken,
-		RefreshToken: tokenPair.RefreshToken,
-		ExpiresIn:    tokenPair.ExpiresIn,
-		User:         user,
-	}, nil
+	// Generate authentication response
+	return as.generateAuthResponse(ctx, user, []string{"user"})
 }
 
 // Login authenticates a user with email and password
@@ -114,70 +64,14 @@ func (as *AuthService) Login(ctx context.Context, req *LoginRequest) (*AuthRespo
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
 
-	// Get user by email
-	user, err := as.userRepo.GetUserByEmail(ctx, strings.ToLower(strings.TrimSpace(req.Email)))
+	// Authenticate user
+	user, err := as.authenticateUser(ctx, req)
 	if err != nil {
-		as.logger.Error("failed to get user by email", "email", req.Email, "error", err)
-		return nil, fmt.Errorf("invalid credentials")
+		return nil, err
 	}
 
-	// Check if account is locked
-	if user.IsLocked() {
-		as.logger.Warn("login attempt on locked account", "user_id", user.ID, "locked_until", user.LockedUntil)
-		return nil, fmt.Errorf("account is temporarily locked due to too many failed attempts")
-	}
-
-	// Verify password
-	if user.PasswordHash == nil {
-		as.logger.Warn("login attempt on account without password", "user_id", user.ID)
-		return nil, fmt.Errorf("invalid credentials")
-	}
-
-	err = as.passwordService.VerifyPassword(*user.PasswordHash, req.Password)
-	if err != nil {
-		// Handle failed login attempt
-		return as.handleFailedLogin(ctx, user)
-	}
-
-	// Reset failed login attempts on successful login
-	if user.FailedLoginAttempts > 0 {
-		err = as.userRepo.UpdateUserLoginAttempts(ctx, user.ID, 0, nil)
-		if err != nil {
-			as.logger.Error("failed to reset login attempts", "user_id", user.ID, "error", err)
-		}
-	}
-
-	// Update last login
-	err = as.userRepo.UpdateLastLogin(ctx, user.ID)
-	if err != nil {
-		as.logger.Error("failed to update last login", "user_id", user.ID, "error", err)
-	}
-
-	// Generate tokens
-	roles := []string{"user"}
-	// Add additional roles based on user properties if needed
-
-	tokenPair, err := as.jwtService.GenerateTokenPair(user.ID, user.Email, roles)
-	if err != nil {
-		as.logger.Error("failed to generate tokens", "user_id", user.ID, "error", err)
-		return nil, fmt.Errorf("failed to generate authentication tokens")
-	}
-
-	// Store refresh token
-	err = as.storeRefreshToken(ctx, user.ID, tokenPair.RefreshToken)
-	if err != nil {
-		as.logger.Error("failed to store refresh token", "user_id", user.ID, "error", err)
-		return nil, fmt.Errorf("failed to store refresh token")
-	}
-
-	as.logger.Info("user logged in successfully", "user_id", user.ID, "email", user.Email)
-
-	return &AuthResponse{
-		AccessToken:  tokenPair.AccessToken,
-		RefreshToken: tokenPair.RefreshToken,
-		ExpiresIn:    tokenPair.ExpiresIn,
-		User:         user,
-	}, nil
+	// Handle successful login
+	return as.handleSuccessfulLogin(ctx, user)
 }
 
 // RefreshToken generates new tokens using a valid refresh token
@@ -186,68 +80,14 @@ func (as *AuthService) RefreshToken(ctx context.Context, refreshTokenString stri
 		return nil, fmt.Errorf("refresh token is required")
 	}
 
-	// Validate refresh token
-	claims, err := as.jwtService.ValidateRefreshToken(refreshTokenString)
+	// Validate and extract token information
+	user, claims, err := as.validateRefreshTokenAndGetUser(ctx, refreshTokenString)
 	if err != nil {
-		as.logger.Warn("invalid refresh token", "error", err)
-		return nil, fmt.Errorf("invalid refresh token")
+		return nil, err
 	}
 
-	// Check if token exists in database
-	tokenHash := as.jwtService.HashRefreshToken(refreshTokenString)
-	storedToken, err := as.refreshTokenRepo.GetRefreshToken(ctx, tokenHash)
-	if err != nil {
-		as.logger.Warn("refresh token not found in database", "user_id", claims.UserID)
-		return nil, fmt.Errorf("invalid refresh token")
-	}
-
-	// Check if token is still valid
-	if !storedToken.IsValid() {
-		as.logger.Warn("refresh token is expired or revoked", "user_id", claims.UserID)
-		return nil, fmt.Errorf("refresh token is expired or revoked")
-	}
-
-	// Get user
-	user, err := as.userRepo.GetUserByID(ctx, claims.UserID)
-	if err != nil {
-		as.logger.Error("failed to get user for token refresh", "user_id", claims.UserID, "error", err)
-		return nil, fmt.Errorf("user not found")
-	}
-
-	// Check if user account is locked
-	if user.IsLocked() {
-		as.logger.Warn("token refresh attempt on locked account", "user_id", user.ID)
-		return nil, fmt.Errorf("account is temporarily locked")
-	}
-
-	// Revoke old refresh token
-	err = as.refreshTokenRepo.RevokeRefreshToken(ctx, tokenHash)
-	if err != nil {
-		as.logger.Error("failed to revoke old refresh token", "user_id", user.ID, "error", err)
-	}
-
-	// Generate new tokens
-	tokenPair, err := as.jwtService.GenerateTokenPair(user.ID, user.Email, claims.Roles)
-	if err != nil {
-		as.logger.Error("failed to generate new tokens", "user_id", user.ID, "error", err)
-		return nil, fmt.Errorf("failed to generate new tokens")
-	}
-
-	// Store new refresh token
-	err = as.storeRefreshToken(ctx, user.ID, tokenPair.RefreshToken)
-	if err != nil {
-		as.logger.Error("failed to store new refresh token", "user_id", user.ID, "error", err)
-		return nil, fmt.Errorf("failed to store new refresh token")
-	}
-
-	as.logger.Info("tokens refreshed successfully", "user_id", user.ID)
-
-	return &AuthResponse{
-		AccessToken:  tokenPair.AccessToken,
-		RefreshToken: tokenPair.RefreshToken,
-		ExpiresIn:    tokenPair.ExpiresIn,
-		User:         user,
-	}, nil
+	// Refresh tokens
+	return as.refreshUserTokens(ctx, user, claims, refreshTokenString)
 }
 
 // Logout revokes all refresh tokens for a user
@@ -343,4 +183,205 @@ func (as *AuthService) storeRefreshToken(ctx context.Context, userID, token stri
 	}
 
 	return as.refreshTokenRepo.CreateRefreshToken(ctx, refreshToken)
+}
+
+// checkEmailAvailability validates that email is not already registered
+func (as *AuthService) checkEmailAvailability(ctx context.Context, email string) error {
+	exists, err := as.userRepo.EmailExists(ctx, email)
+	if err != nil {
+		as.logger.Error("failed to check email existence", "email", email, "error", err)
+		return fmt.Errorf("failed to check email availability")
+	}
+	if exists {
+		return fmt.Errorf("email address already registered")
+	}
+	return nil
+}
+
+// createUserFromRequest creates a new user from registration request
+func (as *AuthService) createUserFromRequest(ctx context.Context, req *RegisterRequest) (*User, error) {
+	// Validate password strength
+	if err := as.passwordService.ValidatePasswordStrength(req.Password); err != nil {
+		return nil, fmt.Errorf("password validation failed: %w", err)
+	}
+
+	// Hash password
+	hashedPassword, err := as.passwordService.HashPassword(req.Password)
+	if err != nil {
+		as.logger.Error("failed to hash password", "error", err)
+		return nil, fmt.Errorf("failed to process password")
+	}
+
+	// Create user struct
+	user := &User{
+		ID:                  uuid.New().String(),
+		Email:               strings.ToLower(strings.TrimSpace(req.Email)),
+		Name:                strings.TrimSpace(req.Name),
+		PasswordHash:        &hashedPassword,
+		EmailVerified:       false,
+		FailedLoginAttempts: 0,
+		CreatedAt:           time.Now(),
+		UpdatedAt:           time.Now(),
+	}
+
+	// Store user in database
+	err = as.userRepo.CreateUser(ctx, user)
+	if err != nil {
+		as.logger.Error("failed to create user", "email", req.Email, "error", err)
+		return nil, fmt.Errorf("failed to create user account")
+	}
+
+	return user, nil
+}
+
+// generateAuthResponse creates an AuthResponse with tokens for a user
+func (as *AuthService) generateAuthResponse(ctx context.Context, user *User, roles []string) (*AuthResponse, error) {
+	// Generate tokens
+	tokenPair, err := as.jwtService.GenerateTokenPair(user.ID, user.Email, roles)
+	if err != nil {
+		as.logger.Error("failed to generate tokens", "user_id", user.ID, "error", err)
+		return nil, fmt.Errorf("failed to generate authentication tokens")
+	}
+
+	// Store refresh token
+	err = as.storeRefreshToken(ctx, user.ID, tokenPair.RefreshToken)
+	if err != nil {
+		as.logger.Error("failed to store refresh token", "user_id", user.ID, "error", err)
+		return nil, fmt.Errorf("failed to store refresh token")
+	}
+
+	as.logger.Info("authentication successful", "user_id", user.ID, "email", user.Email)
+
+	return &AuthResponse{
+		AccessToken:  tokenPair.AccessToken,
+		RefreshToken: tokenPair.RefreshToken,
+		ExpiresIn:    tokenPair.ExpiresIn,
+		User:         user,
+	}, nil
+}
+
+// authenticateUser retrieves and validates user credentials
+func (as *AuthService) authenticateUser(ctx context.Context, req *LoginRequest) (*User, error) {
+	// Get user by email
+	user, err := as.userRepo.GetUserByEmail(ctx, strings.ToLower(strings.TrimSpace(req.Email)))
+	if err != nil {
+		as.logger.Error("failed to get user by email", "email", req.Email, "error", err)
+		return nil, fmt.Errorf("invalid credentials")
+	}
+
+	// Check if account is locked
+	if user.IsLocked() {
+		as.logger.Warn("login attempt on locked account", "user_id", user.ID, "locked_until", user.LockedUntil)
+		return nil, fmt.Errorf("account is temporarily locked due to too many failed attempts")
+	}
+
+	// Verify password
+	if user.PasswordHash == nil {
+		as.logger.Warn("login attempt on account without password", "user_id", user.ID)
+		return nil, fmt.Errorf("invalid credentials")
+	}
+
+	err = as.passwordService.VerifyPassword(*user.PasswordHash, req.Password)
+	if err != nil {
+		// Handle failed login attempt
+		_, failErr := as.handleFailedLogin(ctx, user)
+		return nil, failErr
+	}
+
+	return user, nil
+}
+
+// handleSuccessfulLogin updates user state and generates authentication response
+func (as *AuthService) handleSuccessfulLogin(ctx context.Context, user *User) (*AuthResponse, error) {
+	// Reset failed login attempts on successful login
+	if user.FailedLoginAttempts > 0 {
+		err := as.userRepo.UpdateUserLoginAttempts(ctx, user.ID, 0, nil)
+		if err != nil {
+			as.logger.Error("failed to reset login attempts", "user_id", user.ID, "error", err)
+		}
+	}
+
+	// Update last login
+	err := as.userRepo.UpdateLastLogin(ctx, user.ID)
+	if err != nil {
+		as.logger.Error("failed to update last login", "user_id", user.ID, "error", err)
+	}
+
+	// Generate tokens with user roles
+	roles := []string{"user"}
+	// Add additional roles based on user properties if needed
+
+	return as.generateAuthResponse(ctx, user, roles)
+}
+
+// validateRefreshTokenAndGetUser validates refresh token and retrieves associated user
+func (as *AuthService) validateRefreshTokenAndGetUser(ctx context.Context, refreshTokenString string) (*User, *UserClaims, error) {
+	// Validate refresh token
+	claims, err := as.jwtService.ValidateRefreshToken(refreshTokenString)
+	if err != nil {
+		as.logger.Warn("invalid refresh token", "error", err)
+		return nil, nil, fmt.Errorf("invalid refresh token")
+	}
+
+	// Check if token exists in database
+	tokenHash := as.jwtService.HashRefreshToken(refreshTokenString)
+	storedToken, err := as.refreshTokenRepo.GetRefreshToken(ctx, tokenHash)
+	if err != nil {
+		as.logger.Warn("refresh token not found in database", "user_id", claims.UserID)
+		return nil, nil, fmt.Errorf("invalid refresh token")
+	}
+
+	// Check if token is still valid
+	if !storedToken.IsValid() {
+		as.logger.Warn("refresh token is expired or revoked", "user_id", claims.UserID)
+		return nil, nil, fmt.Errorf("refresh token is expired or revoked")
+	}
+
+	// Get user
+	user, err := as.userRepo.GetUserByID(ctx, claims.UserID)
+	if err != nil {
+		as.logger.Error("failed to get user for token refresh", "user_id", claims.UserID, "error", err)
+		return nil, nil, fmt.Errorf("user not found")
+	}
+
+	// Check if user account is locked
+	if user.IsLocked() {
+		as.logger.Warn("token refresh attempt on locked account", "user_id", user.ID)
+		return nil, nil, fmt.Errorf("account is temporarily locked")
+	}
+
+	return user, claims, nil
+}
+
+// refreshUserTokens generates new tokens and revokes old ones
+func (as *AuthService) refreshUserTokens(ctx context.Context, user *User, claims *UserClaims, oldTokenString string) (*AuthResponse, error) {
+	// Revoke old refresh token
+	tokenHash := as.jwtService.HashRefreshToken(oldTokenString)
+	err := as.refreshTokenRepo.RevokeRefreshToken(ctx, tokenHash)
+	if err != nil {
+		as.logger.Error("failed to revoke old refresh token", "user_id", user.ID, "error", err)
+	}
+
+	// Generate new tokens
+	tokenPair, err := as.jwtService.GenerateTokenPair(user.ID, user.Email, claims.Roles)
+	if err != nil {
+		as.logger.Error("failed to generate new tokens", "user_id", user.ID, "error", err)
+		return nil, fmt.Errorf("failed to generate new tokens")
+	}
+
+	// Store new refresh token
+	err = as.storeRefreshToken(ctx, user.ID, tokenPair.RefreshToken)
+	if err != nil {
+		as.logger.Error("failed to store new refresh token", "user_id", user.ID, "error", err)
+		return nil, fmt.Errorf("failed to store new refresh token")
+	}
+
+	as.logger.Info("tokens refreshed successfully", "user_id", user.ID)
+
+	return &AuthResponse{
+		AccessToken:  tokenPair.AccessToken,
+		RefreshToken: tokenPair.RefreshToken,
+		ExpiresIn:    tokenPair.ExpiresIn,
+		User:         user,
+	}, nil
 }
