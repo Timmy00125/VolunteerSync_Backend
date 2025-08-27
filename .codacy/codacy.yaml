@@ -1,3 +1,10 @@
+exclude_paths:
+    - internal/graph/generated/**
+    - internal/graph/model/**
+    - vendor/**
+    - '**/*_test.go'
+    - tests/**
+    - '**/generated/**'
 runtimes:
     - java@17.0.10
     - python@3.11.11
@@ -6,15 +13,3 @@ tools:
     - pmd@6.55.0
     - semgrep@1.78.0
     - trivy@0.65.0
-exclude_paths:
-  # Generated GraphQL code
-  - "internal/graph/generated/**"
-  # GraphQL model generation (if any)
-  - "internal/graph/model/**"
-  # Build artifacts or vendor (if present)
-  - "vendor/**"
-  # Tests across the repo
-  - "**/*_test.go"
-  - "tests/**"
-  # Example: codegen outputs elsewhere (safe pattern)
-  - "**/generated/**"
