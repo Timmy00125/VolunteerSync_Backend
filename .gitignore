@@ -1,6 +1,9 @@
 
 
 
+# Build artifacts
+/api
+
 # gemini-cli settings
 .gemini/
 

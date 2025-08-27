@@ -85,60 +85,25 @@ func NewJWTService(config JWTConfig) (*JWTService, error) {
 
 // GenerateTokenPair generates both access and refresh tokens for a user
 func (js *JWTService) GenerateTokenPair(userID, email string, roles []string) (*TokenPair, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	if email == "" {
-		return nil, fmt.Errorf("email cannot be empty")
+	if err := js.validateTokenInputs(userID, email); err != nil {
+		return nil, err
 	}
 
 	now := time.Now()
-
-	// Ensure roles is not nil
 	if roles == nil {
 		roles = []string{}
 	}
 
 	// Generate access token
-	accessClaims := UserClaims{
-		UserID:    userID,
-		Email:     email,
-		Roles:     roles,
-		TokenType: AccessTokenType,
-	}
-
-	standardClaims := jwt.Claims{
-		Issuer:   js.issuer,
-		Subject:  userID,
-		IssuedAt: now.Unix(),
-		Expiry:   now.Add(js.accessExpiry).Unix(),
-		ID:       uuid.New().String(),
-	}
-
-	accessToken, err := jwt.Sign(jwt.HS256, js.accessSecret, accessClaims, standardClaims)
+	accessToken, err := js.generateAccessToken(userID, email, roles, now)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate access token: %w", err)
+		return nil, err
 	}
 
 	// Generate refresh token
-	refreshClaims := UserClaims{
-		UserID:    userID,
-		Email:     email,
-		Roles:     roles,
-		TokenType: RefreshTokenType,
-	}
-
-	refreshStandardClaims := jwt.Claims{
-		Issuer:   js.issuer,
-		Subject:  userID,
-		IssuedAt: now.Unix(),
-		Expiry:   now.Add(js.refreshExpiry).Unix(),
-		ID:       uuid.New().String(),
-	}
-
-	refreshToken, err := jwt.Sign(jwt.HS256, js.refreshSecret, refreshClaims, refreshStandardClaims)
+	refreshToken, err := js.generateRefreshToken(userID, email, roles, now)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
+		return nil, err
 	}
 
 	return &TokenPair{
@@ -264,4 +229,65 @@ func (js *JWTService) GetTokenClaims(tokenString string) (*UserClaims, error) {
 	}
 
 	return &claims, nil
+}
+
+// validateTokenInputs validates the required inputs for token generation
+func (js *JWTService) validateTokenInputs(userID, email string) error {
+	if userID == "" {
+		return fmt.Errorf("user ID cannot be empty")
+	}
+	if email == "" {
+		return fmt.Errorf("email cannot be empty")
+	}
+	return nil
+}
+
+// generateAccessToken creates an access token with the provided claims
+func (js *JWTService) generateAccessToken(userID, email string, roles []string, now time.Time) ([]byte, error) {
+	accessClaims := UserClaims{
+		UserID:    userID,
+		Email:     email,
+		Roles:     roles,
+		TokenType: AccessTokenType,
+	}
+
+	standardClaims := jwt.Claims{
+		Issuer:   js.issuer,
+		Subject:  userID,
+		IssuedAt: now.Unix(),
+		Expiry:   now.Add(js.accessExpiry).Unix(),
+		ID:       uuid.New().String(),
+	}
+
+	accessToken, err := jwt.Sign(jwt.HS256, js.accessSecret, accessClaims, standardClaims)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate access token: %w", err)
+	}
+
+	return accessToken, nil
+}
+
+// generateRefreshToken creates a refresh token with the provided claims
+func (js *JWTService) generateRefreshToken(userID, email string, roles []string, now time.Time) ([]byte, error) {
+	refreshClaims := UserClaims{
+		UserID:    userID,
+		Email:     email,
+		Roles:     roles,
+		TokenType: RefreshTokenType,
+	}
+
+	refreshStandardClaims := jwt.Claims{
+		Issuer:   js.issuer,
+		Subject:  userID,
+		IssuedAt: now.Unix(),
+		Expiry:   now.Add(js.refreshExpiry).Unix(),
+		ID:       uuid.New().String(),
+	}
+
+	refreshToken, err := jwt.Sign(jwt.HS256, js.refreshSecret, refreshClaims, refreshStandardClaims)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+
+	return refreshToken, nil
 }
