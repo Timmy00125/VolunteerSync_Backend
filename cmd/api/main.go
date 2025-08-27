@@ -156,7 +156,7 @@ func setupRoutes(r *gin.Engine, db *sql.DB, cfg *config.Config) {
 	authMW := mw.NewAuthMiddleware(authSvc, slog.Default())
 
 	gql := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{DB: db, UserService: userSvc}}))
-	r.POST("/graphql", authMW.RequireAuth(), gin.WrapH(gql))
+	r.POST("/graphql", authMW.OptionalAuth(), gin.WrapH(gql))
 	r.GET("/graphql", authMW.OptionalAuth(), func(c *gin.Context) {
 		playground.Handler("GraphQL", "/graphql").ServeHTTP(c.Writer, c.Request)
 	})

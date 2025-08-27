@@ -7,9 +7,9 @@ package graph
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/99designs/gqlgen/graphql"
-	usercore "github.com/volunteersync/backend/internal/core/user"
 	"github.com/volunteersync/backend/internal/graph/generated"
 	"github.com/volunteersync/backend/internal/graph/model"
 	mw "github.com/volunteersync/backend/internal/middleware"
@@ -183,12 +183,27 @@ func (r *mutationResolver) ExportUserData(ctx context.Context) (string, error) {
 
 // Health is the resolver for the health field.
 func (r *queryResolver) Health(ctx context.Context) (*model.Health, error) {
-	panic(fmt.Errorf("not implemented: Health - health"))
+	return &model.Health{
+		Status: "OK",
+		Time:   time.Now(),
+	}, nil
 }
 
 // Me is the resolver for the me field.
 func (r *queryResolver) Me(ctx context.Context) (*model.User, error) {
-	panic(fmt.Errorf("not implemented: Me - me"))
+	if r.UserService == nil {
+		return nil, fmt.Errorf("service unavailable")
+	}
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	prof, err := r.UserService.GetProfileWithDetails(ctx, userID, userID, nil)
+	if err != nil {
+		return nil, err
+	}
+	return toGraphUser(prof), nil
 }
 
 // User is the resolver for the user field.
@@ -263,146 +278,6 @@ func (r *queryResolver) UserActivity(ctx context.Context) ([]*model.ActivityLog,
 		out = append(out, &model.ActivityLog{ID: l.ID, Action: l.Action, CreatedAt: l.CreatedAt})
 	}
 	return out, nil
-}
-
-// --- helpers ---
-func toGraphUser(p *usercore.UserProfile) *model.User { // we'll import usercore at top
-	return &model.User{
-		ID:    p.ID,
-		Email: p.Email,
-		Name:  p.Name,
-		Bio:   p.Bio,
-		Location: func() *model.Location {
-			if p.Location == nil {
-				return nil
-			}
-			var coords *model.Coordinates
-			if p.Location.Lat != nil && p.Location.Lng != nil {
-				coords = &model.Coordinates{Lat: *p.Location.Lat, Lng: *p.Location.Lng}
-			}
-			return &model.Location{City: p.Location.City, State: p.Location.State, Country: p.Location.Country, Coordinates: coords}
-		}(),
-		ProfilePicture: p.ProfilePictureURL,
-		Interests: func() []*model.Interest {
-			out := make([]*model.Interest, 0, len(p.Interests))
-			for _, it := range p.Interests {
-				out = append(out, &model.Interest{ID: it.ID, Name: it.Name, Category: model.InterestCategory(it.Category)})
-			}
-			return out
-		}(),
-		Skills: func() []*model.Skill {
-			out := make([]*model.Skill, 0, len(p.Skills))
-			for _, sk := range p.Skills {
-				out = append(out, &model.Skill{ID: sk.ID, Name: sk.Name, Proficiency: model.SkillProficiency(sk.Proficiency), Verified: sk.Verified})
-			}
-			return out
-		}(),
-		Roles:         p.Roles,
-		IsVerified:    p.IsVerified,
-		CreatedAt:     p.CreatedAt,
-		UpdatedAt:     p.UpdatedAt,
-		LastActiveAt:  p.LastActiveAt,
-		PublicProfile: toGraphPublicProfile(p),
-	}
-}
-
-func toGraphPublicProfile(p *usercore.UserProfile) *model.PublicProfile {
-	return &model.PublicProfile{
-		ID:   p.ID,
-		Name: p.Name,
-		Bio:  p.Bio,
-		Location: func() *model.Location {
-			if p.Location == nil {
-				return nil
-			}
-			var coords *model.Coordinates
-			if p.Location.Lat != nil && p.Location.Lng != nil {
-				coords = &model.Coordinates{Lat: *p.Location.Lat, Lng: *p.Location.Lng}
-			}
-			return &model.Location{City: p.Location.City, State: p.Location.State, Country: p.Location.Country, Coordinates: coords}
-		}(),
-		ProfilePicture: p.ProfilePictureURL,
-		Interests: func() []*model.Interest {
-			out := make([]*model.Interest, 0, len(p.Interests))
-			for _, it := range p.Interests {
-				out = append(out, &model.Interest{ID: it.ID, Name: it.Name, Category: model.InterestCategory(it.Category)})
-			}
-			return out
-		}(),
-		Skills: func() []*model.Skill {
-			out := make([]*model.Skill, 0, len(p.Skills))
-			for _, sk := range p.Skills {
-				out = append(out, &model.Skill{ID: sk.ID, Name: sk.Name, Proficiency: model.SkillProficiency(sk.Proficiency), Verified: sk.Verified})
-			}
-			return out
-		}(),
-		VolunteerStats: &model.VolunteerStats{Hours: 0, EventsParticipated: 0},
-	}
-}
-
-func toDomainUpdateProfile(in model.UpdateProfileInput) usercore.UpdateProfileInput {
-	var loc *usercore.Location
-	if in.Location != nil {
-		loc = &usercore.Location{City: in.Location.City, State: in.Location.State, Country: in.Location.Country, Lat: in.Location.Lat, Lng: in.Location.Lng}
-	}
-	return usercore.UpdateProfileInput{Name: in.Name, Bio: in.Bio, Location: loc}
-}
-func toDomainSkillInput(in model.SkillInput) usercore.SkillInput {
-	return usercore.SkillInput{Name: in.Name, Proficiency: string(in.Proficiency)}
-}
-func toDomainPrivacyInput(in model.PrivacySettingsInput) usercore.PrivacySettings {
-	out := usercore.PrivacySettings{}
-	if in.ProfileVisibility != nil {
-		out.ProfileVisibility = string(*in.ProfileVisibility)
-	}
-	if in.ShowEmail != nil {
-		out.ShowEmail = *in.ShowEmail
-	}
-	if in.ShowLocation != nil {
-		out.ShowLocation = *in.ShowLocation
-	}
-	if in.AllowMessaging != nil {
-		out.AllowMessaging = *in.AllowMessaging
-	}
-	return out
-}
-func toDomainNotifInput(in model.NotificationPreferencesInput) usercore.NotificationPreferences {
-	out := usercore.NotificationPreferences{}
-	if in.EmailNotifications != nil {
-		out.EmailNotifications = *in.EmailNotifications
-	}
-	if in.PushNotifications != nil {
-		out.PushNotifications = *in.PushNotifications
-	}
-	if in.SmsNotifications != nil {
-		out.SMSNotifications = *in.SmsNotifications
-	}
-	if in.EventReminders != nil {
-		out.EventReminders = *in.EventReminders
-	}
-	if in.NewOpportunities != nil {
-		out.NewOpportunities = *in.NewOpportunities
-	}
-	if in.NewsletterSubscription != nil {
-		out.NewsletterSubscription = *in.NewsletterSubscription
-	}
-	return out
-}
-func toDomainSearchFilter(in model.UserSearchFilter) usercore.UserSearchFilter {
-	var loc *usercore.Location
-	if in.Location != nil {
-		loc = &usercore.Location{City: in.Location.City, State: in.Location.State, Country: in.Location.Country, Lat: in.Location.Lat, Lng: in.Location.Lng}
-	}
-	var avail, exp *string
-	if in.Availability != nil {
-		s := string(*in.Availability)
-		avail = &s
-	}
-	if in.Experience != nil {
-		s := string(*in.Experience)
-		exp = &s
-	}
-	return usercore.UserSearchFilter{Skills: in.Skills, InterestIDs: in.Interests, Location: loc, Availability: avail, Experience: exp}
 }
 
 // Mutation returns generated.MutationResolver implementation.

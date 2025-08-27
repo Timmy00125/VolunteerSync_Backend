@@ -1,6 +1,18 @@
 package user
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+// Common errors for user package
+var (
+	ErrUserNotFound       = errors.New("user not found")
+	ErrInvalidInput       = errors.New("invalid input")
+	ErrPermissionDenied   = errors.New("permission denied")
+	ErrSkillAlreadyExists = errors.New("skill already exists")
+	ErrSkillNotFound      = errors.New("skill not found")
+)
 
 // Location represents user's location data.
 type Location struct {

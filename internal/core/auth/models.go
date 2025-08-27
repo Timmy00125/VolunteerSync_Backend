@@ -1,7 +1,18 @@
 package auth
 
 import (
+	"errors"
 	"time"
+)
+
+// Common errors for auth package
+var (
+	ErrUserNotFound       = errors.New("user not found")
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrInvalidToken       = errors.New("invalid token")
+	ErrTokenExpired       = errors.New("token expired")
+	ErrAccountLocked      = errors.New("account locked")
+	ErrEmailNotVerified   = errors.New("email not verified")
 )
 
 // User represents a user in the system
