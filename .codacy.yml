@@ -1,0 +1,24 @@
+# Codacy configuration
+# Exclude generated code and tests from analysis
+# Docs: https://docs.codacy.com/repositories-configure/codacy-configuration-file/
+
+engines:
+  # Keep default tools enabled; exclusions apply globally
+  # Example to explicitly list tools (optional):
+  # eslint: true
+  # golangci-lint: true
+  # semgrep: true
+  # trivy: true
+
+exclude_paths:
+  # Generated GraphQL code
+  - "internal/graph/generated/**"
+  # GraphQL model generation (if any)
+  - "internal/graph/model/**"
+  # Build artifacts or vendor (if present)
+  - "vendor/**"
+  # Tests across the repo
+  - "**/*_test.go"
+  - "tests/**"
+  # Example: codegen outputs elsewhere (safe pattern)
+  - "**/generated/**"
