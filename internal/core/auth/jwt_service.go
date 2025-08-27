@@ -124,6 +124,11 @@ func (js *JWTService) ValidateAccessToken(tokenString string) (*UserClaims, erro
 		return nil, fmt.Errorf("invalid access token: %w", err)
 	}
 
+	// Enforce time-based claims (exp, nbf)
+	if err := js.validateTimeClaims(verifiedToken.StandardClaims); err != nil {
+		return nil, fmt.Errorf("invalid access token: %w", err)
+	}
+
 	var claims UserClaims
 	err = verifiedToken.Claims(&claims)
 	if err != nil {
@@ -146,6 +151,11 @@ func (js *JWTService) ValidateRefreshToken(tokenString string) (*UserClaims, err
 
 	verifiedToken, err := jwt.Verify(jwt.HS256, js.refreshSecret, []byte(tokenString), js.blocklist)
 	if err != nil {
+		return nil, fmt.Errorf("invalid refresh token: %w", err)
+	}
+
+	// Enforce time-based claims (exp, nbf)
+	if err := js.validateTimeClaims(verifiedToken.StandardClaims); err != nil {
 		return nil, fmt.Errorf("invalid refresh token: %w", err)
 	}
 
@@ -290,4 +300,21 @@ func (js *JWTService) generateRefreshToken(userID, email string, roles []string,
 	}
 
 	return refreshToken, nil
+}
+
+// validateTimeClaims enforces validation for standard time-based JWT claims.
+// It validates:
+//   - exp (Expiry): must be in the future relative to time.Now().
+//   - nbf (NotBefore): if present, must be in the past relative to time.Now().
+//
+// No leeway is applied by default to keep validation strict and tests deterministic.
+func (js *JWTService) validateTimeClaims(standard jwt.Claims) error {
+	now := time.Now().Unix()
+	if standard.Expiry > 0 && now >= standard.Expiry {
+		return fmt.Errorf("token expired")
+	}
+	if standard.NotBefore > 0 && now < standard.NotBefore {
+		return fmt.Errorf("token not yet valid")
+	}
+	return nil
 }
