@@ -13,6 +13,7 @@ type UserStore interface {
 
 	ReplaceInterests(ctx context.Context, userID string, interestIDs []string) ([]Interest, error)
 	ListInterests(ctx context.Context) ([]Interest, error)
+	ListUserInterests(ctx context.Context, userID string) ([]Interest, error)
 
 	AddSkill(ctx context.Context, userID string, in SkillInput) (*Skill, error)
 	RemoveSkill(ctx context.Context, userID, skillID string) error
@@ -76,6 +77,23 @@ func (s *Service) GetProfile(ctx context.Context, userID, requesterID string, re
 	prof, err := s.store.GetProfile(ctx, userID)
 	if err != nil {
 		return nil, err
+	}
+	filtered := filterProfileByPrivacy(*prof, requesterID, requesterRoles)
+	return &filtered, nil
+}
+
+// GetProfileWithDetails returns profile and fills interests/skills for presentation.
+func (s *Service) GetProfileWithDetails(ctx context.Context, userID, requesterID string, requesterRoles []string) (*UserProfile, error) {
+	prof, err := s.store.GetProfile(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	// Load interests and skills
+	if ints, err := s.store.ListUserInterests(ctx, userID); err == nil {
+		prof.Interests = ints
+	}
+	if skills, err := s.store.ListSkills(ctx, userID); err == nil {
+		prof.Skills = skills
 	}
 	filtered := filterProfileByPrivacy(*prof, requesterID, requesterRoles)
 	return &filtered, nil

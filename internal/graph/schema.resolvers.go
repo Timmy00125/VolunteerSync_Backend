@@ -9,8 +9,10 @@ import (
 	"fmt"
 
 	"github.com/99designs/gqlgen/graphql"
+	usercore "github.com/volunteersync/backend/internal/core/user"
 	"github.com/volunteersync/backend/internal/graph/generated"
 	"github.com/volunteersync/backend/internal/graph/model"
+	mw "github.com/volunteersync/backend/internal/middleware"
 )
 
 // Register is the resolver for the register field.
@@ -45,37 +47,123 @@ func (r *mutationResolver) GoogleCallback(ctx context.Context, code string, stat
 
 // UpdateProfile is the resolver for the updateProfile field.
 func (r *mutationResolver) UpdateProfile(ctx context.Context, input model.UpdateProfileInput) (*model.User, error) {
-	panic(fmt.Errorf("not implemented: UpdateProfile - updateProfile"))
+	if r.UserService == nil {
+		return nil, fmt.Errorf("service unavailable")
+	}
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+	in := toDomainUpdateProfile(input)
+	prof, err := r.UserService.UpdateProfile(ctx, userID, in)
+	if err != nil {
+		return nil, err
+	}
+	return toGraphUser(prof), nil
 }
 
 // UploadProfilePicture is the resolver for the uploadProfilePicture field.
 func (r *mutationResolver) UploadProfilePicture(ctx context.Context, file graphql.Upload) (string, error) {
-	panic(fmt.Errorf("not implemented: UploadProfilePicture - uploadProfilePicture"))
+	if r.UserService == nil {
+		return "", fmt.Errorf("service unavailable")
+	}
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return "", fmt.Errorf("unauthorized")
+	}
+	// Read file bytes
+	buf := make([]byte, file.Size)
+	n, err := file.File.Read(buf)
+	if err != nil {
+		return "", err
+	}
+	url, err := r.UserService.UploadProfilePicture(ctx, userID, buf[:n], file.ContentType)
+	if err != nil {
+		return "", err
+	}
+	return url, nil
 }
 
 // UpdateInterests is the resolver for the updateInterests field.
 func (r *mutationResolver) UpdateInterests(ctx context.Context, input model.InterestInput) (*model.User, error) {
-	panic(fmt.Errorf("not implemented: UpdateInterests - updateInterests"))
+	if r.UserService == nil {
+		return nil, fmt.Errorf("service unavailable")
+	}
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+	prof, err := r.UserService.UpdateInterests(ctx, userID, input.InterestIds)
+	if err != nil {
+		return nil, err
+	}
+	return toGraphUser(prof), nil
 }
 
 // AddSkill is the resolver for the addSkill field.
 func (r *mutationResolver) AddSkill(ctx context.Context, input model.SkillInput) (*model.User, error) {
-	panic(fmt.Errorf("not implemented: AddSkill - addSkill"))
+	if r.UserService == nil {
+		return nil, fmt.Errorf("service unavailable")
+	}
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+	prof, err := r.UserService.AddSkill(ctx, userID, toDomainSkillInput(input))
+	if err != nil {
+		return nil, err
+	}
+	return toGraphUser(prof), nil
 }
 
 // RemoveSkill is the resolver for the removeSkill field.
 func (r *mutationResolver) RemoveSkill(ctx context.Context, skillID string) (*model.User, error) {
-	panic(fmt.Errorf("not implemented: RemoveSkill - removeSkill"))
+	if r.UserService == nil {
+		return nil, fmt.Errorf("service unavailable")
+	}
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+	prof, err := r.UserService.RemoveSkill(ctx, userID, skillID)
+	if err != nil {
+		return nil, err
+	}
+	return toGraphUser(prof), nil
 }
 
 // UpdatePrivacySettings is the resolver for the updatePrivacySettings field.
 func (r *mutationResolver) UpdatePrivacySettings(ctx context.Context, input model.PrivacySettingsInput) (*model.User, error) {
-	panic(fmt.Errorf("not implemented: UpdatePrivacySettings - updatePrivacySettings"))
+	if r.UserService == nil {
+		return nil, fmt.Errorf("service unavailable")
+	}
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+	in := toDomainPrivacyInput(input)
+	prof, err := r.UserService.UpdatePrivacySettings(ctx, userID, in)
+	if err != nil {
+		return nil, err
+	}
+	return toGraphUser(prof), nil
 }
 
 // UpdateNotificationPreferences is the resolver for the updateNotificationPreferences field.
 func (r *mutationResolver) UpdateNotificationPreferences(ctx context.Context, input model.NotificationPreferencesInput) (*model.User, error) {
-	panic(fmt.Errorf("not implemented: UpdateNotificationPreferences - updateNotificationPreferences"))
+	if r.UserService == nil {
+		return nil, fmt.Errorf("service unavailable")
+	}
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+	dom := toDomainNotifInput(input)
+	prof, err := r.UserService.UpdateNotificationPreferences(ctx, userID, dom)
+	if err != nil {
+		return nil, err
+	}
+	return toGraphUser(prof), nil
 }
 
 // ChangePassword is the resolver for the changePassword field.
@@ -105,12 +193,40 @@ func (r *queryResolver) Me(ctx context.Context) (*model.User, error) {
 
 // User is the resolver for the user field.
 func (r *queryResolver) User(ctx context.Context, id string) (*model.PublicProfile, error) {
-	panic(fmt.Errorf("not implemented: User - user"))
+	if r.UserService == nil {
+		return nil, fmt.Errorf("service unavailable")
+	}
+	requesterID := mw.GetUserIDFromContext(ctx)
+	// roles from claims could be used later
+	prof, err := r.UserService.GetProfileWithDetails(ctx, id, requesterID, nil)
+	if err != nil {
+		return nil, err
+	}
+	return toGraphPublicProfile(prof), nil
 }
 
 // SearchUsers is the resolver for the searchUsers field.
 func (r *queryResolver) SearchUsers(ctx context.Context, filter model.UserSearchFilter, limit *int, offset *int) ([]*model.PublicProfile, error) {
-	panic(fmt.Errorf("not implemented: SearchUsers - searchUsers"))
+	if r.UserService == nil {
+		return nil, fmt.Errorf("service unavailable")
+	}
+	l, o := 20, 0
+	if limit != nil {
+		l = *limit
+	}
+	if offset != nil {
+		o = *offset
+	}
+	dom := toDomainSearchFilter(filter)
+	res, err := r.UserService.SearchUsers(ctx, dom, l, o)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*model.PublicProfile, 0, len(res))
+	for _, p := range res {
+		out = append(out, toGraphPublicProfile(&p))
+	}
+	return out, nil
 }
 
 // Interests is the resolver for the interests field.
@@ -134,8 +250,11 @@ func (r *queryResolver) UserActivity(ctx context.Context) ([]*model.ActivityLog,
 	if r.UserService == nil {
 		return nil, fmt.Errorf("service unavailable")
 	}
-	// TODO: get userID from context once auth is integrated here
-	logs, err := r.UserService.ListActivityLogs(ctx, "", 50, 0)
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+	logs, err := r.UserService.ListActivityLogs(ctx, userID, 50, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +263,146 @@ func (r *queryResolver) UserActivity(ctx context.Context) ([]*model.ActivityLog,
 		out = append(out, &model.ActivityLog{ID: l.ID, Action: l.Action, CreatedAt: l.CreatedAt})
 	}
 	return out, nil
+}
+
+// --- helpers ---
+func toGraphUser(p *usercore.UserProfile) *model.User { // we'll import usercore at top
+	return &model.User{
+		ID:    p.ID,
+		Email: p.Email,
+		Name:  p.Name,
+		Bio:   p.Bio,
+		Location: func() *model.Location {
+			if p.Location == nil {
+				return nil
+			}
+			var coords *model.Coordinates
+			if p.Location.Lat != nil && p.Location.Lng != nil {
+				coords = &model.Coordinates{Lat: *p.Location.Lat, Lng: *p.Location.Lng}
+			}
+			return &model.Location{City: p.Location.City, State: p.Location.State, Country: p.Location.Country, Coordinates: coords}
+		}(),
+		ProfilePicture: p.ProfilePictureURL,
+		Interests: func() []*model.Interest {
+			out := make([]*model.Interest, 0, len(p.Interests))
+			for _, it := range p.Interests {
+				out = append(out, &model.Interest{ID: it.ID, Name: it.Name, Category: model.InterestCategory(it.Category)})
+			}
+			return out
+		}(),
+		Skills: func() []*model.Skill {
+			out := make([]*model.Skill, 0, len(p.Skills))
+			for _, sk := range p.Skills {
+				out = append(out, &model.Skill{ID: sk.ID, Name: sk.Name, Proficiency: model.SkillProficiency(sk.Proficiency), Verified: sk.Verified})
+			}
+			return out
+		}(),
+		Roles:         p.Roles,
+		IsVerified:    p.IsVerified,
+		CreatedAt:     p.CreatedAt,
+		UpdatedAt:     p.UpdatedAt,
+		LastActiveAt:  p.LastActiveAt,
+		PublicProfile: toGraphPublicProfile(p),
+	}
+}
+
+func toGraphPublicProfile(p *usercore.UserProfile) *model.PublicProfile {
+	return &model.PublicProfile{
+		ID:   p.ID,
+		Name: p.Name,
+		Bio:  p.Bio,
+		Location: func() *model.Location {
+			if p.Location == nil {
+				return nil
+			}
+			var coords *model.Coordinates
+			if p.Location.Lat != nil && p.Location.Lng != nil {
+				coords = &model.Coordinates{Lat: *p.Location.Lat, Lng: *p.Location.Lng}
+			}
+			return &model.Location{City: p.Location.City, State: p.Location.State, Country: p.Location.Country, Coordinates: coords}
+		}(),
+		ProfilePicture: p.ProfilePictureURL,
+		Interests: func() []*model.Interest {
+			out := make([]*model.Interest, 0, len(p.Interests))
+			for _, it := range p.Interests {
+				out = append(out, &model.Interest{ID: it.ID, Name: it.Name, Category: model.InterestCategory(it.Category)})
+			}
+			return out
+		}(),
+		Skills: func() []*model.Skill {
+			out := make([]*model.Skill, 0, len(p.Skills))
+			for _, sk := range p.Skills {
+				out = append(out, &model.Skill{ID: sk.ID, Name: sk.Name, Proficiency: model.SkillProficiency(sk.Proficiency), Verified: sk.Verified})
+			}
+			return out
+		}(),
+		VolunteerStats: &model.VolunteerStats{Hours: 0, EventsParticipated: 0},
+	}
+}
+
+func toDomainUpdateProfile(in model.UpdateProfileInput) usercore.UpdateProfileInput {
+	var loc *usercore.Location
+	if in.Location != nil {
+		loc = &usercore.Location{City: in.Location.City, State: in.Location.State, Country: in.Location.Country, Lat: in.Location.Lat, Lng: in.Location.Lng}
+	}
+	return usercore.UpdateProfileInput{Name: in.Name, Bio: in.Bio, Location: loc}
+}
+func toDomainSkillInput(in model.SkillInput) usercore.SkillInput {
+	return usercore.SkillInput{Name: in.Name, Proficiency: string(in.Proficiency)}
+}
+func toDomainPrivacyInput(in model.PrivacySettingsInput) usercore.PrivacySettings {
+	out := usercore.PrivacySettings{}
+	if in.ProfileVisibility != nil {
+		out.ProfileVisibility = string(*in.ProfileVisibility)
+	}
+	if in.ShowEmail != nil {
+		out.ShowEmail = *in.ShowEmail
+	}
+	if in.ShowLocation != nil {
+		out.ShowLocation = *in.ShowLocation
+	}
+	if in.AllowMessaging != nil {
+		out.AllowMessaging = *in.AllowMessaging
+	}
+	return out
+}
+func toDomainNotifInput(in model.NotificationPreferencesInput) usercore.NotificationPreferences {
+	out := usercore.NotificationPreferences{}
+	if in.EmailNotifications != nil {
+		out.EmailNotifications = *in.EmailNotifications
+	}
+	if in.PushNotifications != nil {
+		out.PushNotifications = *in.PushNotifications
+	}
+	if in.SmsNotifications != nil {
+		out.SMSNotifications = *in.SmsNotifications
+	}
+	if in.EventReminders != nil {
+		out.EventReminders = *in.EventReminders
+	}
+	if in.NewOpportunities != nil {
+		out.NewOpportunities = *in.NewOpportunities
+	}
+	if in.NewsletterSubscription != nil {
+		out.NewsletterSubscription = *in.NewsletterSubscription
+	}
+	return out
+}
+func toDomainSearchFilter(in model.UserSearchFilter) usercore.UserSearchFilter {
+	var loc *usercore.Location
+	if in.Location != nil {
+		loc = &usercore.Location{City: in.Location.City, State: in.Location.State, Country: in.Location.Country, Lat: in.Location.Lat, Lng: in.Location.Lng}
+	}
+	var avail, exp *string
+	if in.Availability != nil {
+		s := string(*in.Availability)
+		avail = &s
+	}
+	if in.Experience != nil {
+		s := string(*in.Experience)
+		exp = &s
+	}
+	return usercore.UserSearchFilter{Skills: in.Skills, InterestIDs: in.Interests, Location: loc, Availability: avail, Experience: exp}
 }
 
 // Mutation returns generated.MutationResolver implementation.

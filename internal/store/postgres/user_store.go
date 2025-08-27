@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -127,7 +128,53 @@ func (s *UserStorePG) SetProfilePicture(ctx context.Context, userID, url string)
 }
 
 func (s *UserStorePG) ReplaceInterests(ctx context.Context, userID string, interestIDs []string) ([]user.Interest, error) {
-	return nil, nil
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_interests WHERE user_id=$1`, userID); err != nil {
+		return nil, err
+	}
+	if len(interestIDs) > 0 {
+		// Build bulk insert VALUES placeholders
+		values := make([]string, 0, len(interestIDs))
+		args := make([]any, 0, len(interestIDs)+1)
+		args = append(args, userID)
+		for i, id := range interestIDs {
+			values = append(values, fmt.Sprintf("($1,$%d,NOW())", i+2))
+			args = append(args, id)
+		}
+		q := `INSERT INTO user_interests (user_id, interest_id, created_at) VALUES ` + strings.Join(values, ",") + ` ON CONFLICT DO NOTHING`
+		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	const sel = `SELECT i.id, i.name, c.name
+				 FROM user_interests ui
+				 JOIN interests i ON i.id=ui.interest_id
+				 JOIN interest_categories c ON c.id=i.category_id
+				 WHERE ui.user_id=$1
+				 ORDER BY c.name, i.name`
+	rows, err := s.db.QueryContext(ctx, sel, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []user.Interest
+	for rows.Next() {
+		var it user.Interest
+		if err := rows.Scan(&it.ID, &it.Name, &it.Category); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
 }
 
 func (s *UserStorePG) ListInterests(ctx context.Context) ([]user.Interest, error) {
@@ -148,18 +195,73 @@ func (s *UserStorePG) ListInterests(ctx context.Context) ([]user.Interest, error
 	return out, rows.Err()
 }
 
-func (s *UserStorePG) AddSkill(ctx context.Context, userID string, in user.SkillInput) (*user.Skill, error) {
-	return nil, nil
+func (s *UserStorePG) ListUserInterests(ctx context.Context, userID string) ([]user.Interest, error) {
+	const q = `SELECT i.id, i.name, c.name FROM user_interests ui JOIN interests i ON i.id=ui.interest_id JOIN interest_categories c ON c.id=i.category_id WHERE ui.user_id=$1 ORDER BY c.name, i.name`
+	rows, err := s.db.QueryContext(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []user.Interest
+	for rows.Next() {
+		var it user.Interest
+		if err := rows.Scan(&it.ID, &it.Name, &it.Category); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
 }
-func (s *UserStorePG) RemoveSkill(ctx context.Context, userID, skillID string) error { return nil }
+
+func (s *UserStorePG) AddSkill(ctx context.Context, userID string, in user.SkillInput) (*user.Skill, error) {
+	const q = `INSERT INTO user_skills (user_id, name, proficiency, verified)
+			   VALUES ($1,$2,$3,false)
+			   RETURNING id, name, proficiency, verified, created_at, updated_at`
+	var sk user.Skill
+	if err := s.db.QueryRowContext(ctx, q, userID, in.Name, strings.ToUpper(in.Proficiency)).Scan(
+		&sk.ID, &sk.Name, &sk.Proficiency, &sk.Verified, &sk.CreatedAt, &sk.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+	return &sk, nil
+}
+func (s *UserStorePG) RemoveSkill(ctx context.Context, userID, skillID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM user_skills WHERE id=$1 AND user_id=$2`, skillID, userID)
+	return err
+}
 func (s *UserStorePG) ListSkills(ctx context.Context, userID string) ([]user.Skill, error) {
-	return nil, nil
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, proficiency, verified, created_at, updated_at FROM user_skills WHERE user_id=$1 ORDER BY name`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []user.Skill
+	for rows.Next() {
+		var sk user.Skill
+		if err := rows.Scan(&sk.ID, &sk.Name, &sk.Proficiency, &sk.Verified, &sk.CreatedAt, &sk.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, sk)
+	}
+	return out, rows.Err()
 }
 func (s *UserStorePG) UpdatePrivacy(ctx context.Context, userID string, in user.PrivacySettings) (user.PrivacySettings, error) {
-	return user.PrivacySettings{}, nil
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET profile_visibility=$1, show_email=$2, show_location=$3, allow_messaging=$4, updated_at=NOW() WHERE id=$5`,
+		strings.ToUpper(in.ProfileVisibility), in.ShowEmail, in.ShowLocation, in.AllowMessaging, userID,
+	)
+	if err != nil {
+		return user.PrivacySettings{}, err
+	}
+	return in, nil
 }
 func (s *UserStorePG) UpdateNotifications(ctx context.Context, userID string, in user.NotificationPreferences) (user.NotificationPreferences, error) {
-	return user.NotificationPreferences{}, nil
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET email_notifications=$1, push_notifications=$2, sms_notifications=$3, event_reminders=$4, new_opportunities=$5, newsletter_subscription=$6, updated_at=NOW() WHERE id=$7`,
+		in.EmailNotifications, in.PushNotifications, in.SMSNotifications, in.EventReminders, in.NewOpportunities, in.NewsletterSubscription, userID,
+	)
+	if err != nil {
+		return user.NotificationPreferences{}, err
+	}
+	return in, nil
 }
 func (s *UserStorePG) GetUserRoles(ctx context.Context, userID string) ([]string, error) {
 	return nil, nil
@@ -168,11 +270,54 @@ func (s *UserStorePG) SetUserRoles(ctx context.Context, userID string, roles []s
 	return nil
 }
 func (s *UserStorePG) SearchUsers(ctx context.Context, filter user.UserSearchFilter, limit, offset int) ([]user.UserProfile, error) {
-	return nil, nil
+	// Minimal baseline: return empty set until full search is implemented
+	return []user.UserProfile{}, nil
 }
-func (s *UserStorePG) LogActivity(ctx context.Context, log user.ActivityLog) error { return nil }
+func (s *UserStorePG) LogActivity(ctx context.Context, l user.ActivityLog) error {
+	var detailsJSON any
+	if l.Details != nil {
+		b, err := json.Marshal(l.Details)
+		if err != nil {
+			return err
+		}
+		detailsJSON = string(b)
+	} else {
+		detailsJSON = nil
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO user_activity_logs (user_id, action, details, ip_address, user_agent) VALUES ($1,$2,COALESCE($3::jsonb, NULL),$4,$5)`,
+		l.UserID, l.Action, detailsJSON, l.IPAddress, l.UserAgent,
+	)
+	return err
+}
 func (s *UserStorePG) ListActivityLogs(ctx context.Context, userID string, limit, offset int) ([]user.ActivityLog, error) {
-	return nil, nil
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, action, details, ip_address, user_agent, created_at FROM user_activity_logs WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`, userID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []user.ActivityLog
+	for rows.Next() {
+		var al user.ActivityLog
+		var details sql.NullString
+		var ip, ua sql.NullString
+		if err := rows.Scan(&al.ID, &al.Action, &details, &ip, &ua, &al.CreatedAt); err != nil {
+			return nil, err
+		}
+		al.UserID = userID
+		if details.Valid {
+			var m map[string]any
+			if err := json.Unmarshal([]byte(details.String), &m); err == nil {
+				al.Details = m
+			}
+		}
+		al.IPAddress = nullStringPtr(ip)
+		al.UserAgent = nullStringPtr(ua)
+		out = append(out, al)
+	}
+	return out, rows.Err()
 }
 
 func nullStringPtr(ns sql.NullString) *string {
