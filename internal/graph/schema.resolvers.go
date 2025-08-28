@@ -224,8 +224,8 @@ func (r *mutationResolver) UpdateEvent(ctx context.Context, id string, input mod
 	// Convert GraphQL input to domain input
 	domainInput := toDomainUpdateEventInput(input)
 
-	// Update event via service
-	event, err := r.EventService.UpdateEvent(ctx, userID, id, domainInput)
+	// Update event via service (eventID, userID)
+	event, err := r.EventService.UpdateEvent(ctx, id, userID, domainInput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update event: %w", err)
 	}
@@ -247,8 +247,8 @@ func (r *mutationResolver) PublishEvent(ctx context.Context, id string) (*model.
 		return nil, fmt.Errorf("event service unavailable")
 	}
 
-	// Publish event via service
-	event, err := r.EventService.PublishEvent(ctx, userID, id)
+	// Publish event via service (eventID, userID)
+	event, err := r.EventService.PublishEvent(ctx, id, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to publish event: %w", err)
 	}
@@ -276,8 +276,8 @@ func (r *mutationResolver) CancelEvent(ctx context.Context, id string, reason *s
 		reasonStr = *reason
 	}
 
-	// Cancel event via service
-	event, err := r.EventService.CancelEvent(ctx, userID, id, reasonStr)
+	// Cancel event via service (eventID, userID)
+	event, err := r.EventService.CancelEvent(ctx, id, userID, reasonStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to cancel event: %w", err)
 	}
@@ -288,7 +288,23 @@ func (r *mutationResolver) CancelEvent(ctx context.Context, id string, reason *s
 
 // DeleteEvent is the resolver for the deleteEvent field.
 func (r *mutationResolver) DeleteEvent(ctx context.Context, id string) (bool, error) {
-	panic(fmt.Errorf("not implemented: DeleteEvent - deleteEvent"))
+	// Get current user from context
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return false, fmt.Errorf("authentication required")
+	}
+
+	// Check if EventService is available
+	if r.EventService == nil {
+		return false, fmt.Errorf("event service unavailable")
+	}
+
+	// Delete (archive) event via service (eventID, userID)
+	if err := r.EventService.DeleteEvent(ctx, id, userID); err != nil {
+		return false, fmt.Errorf("failed to delete event: %w", err)
+	}
+
+	return true, nil
 }
 
 // AddEventImage is the resolver for the addEventImage field.
