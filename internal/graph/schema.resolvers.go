@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/volunteersync/backend/internal/core/event"
 	"github.com/volunteersync/backend/internal/graph/generated"
 	"github.com/volunteersync/backend/internal/graph/model"
 	mw "github.com/volunteersync/backend/internal/middleware"
@@ -421,32 +422,204 @@ func (r *queryResolver) UserActivity(ctx context.Context) ([]*model.ActivityLog,
 
 // Event is the resolver for the event field.
 func (r *queryResolver) Event(ctx context.Context, id string) (*model.Event, error) {
-	panic(fmt.Errorf("not implemented: Event - event"))
+	// Check if EventService is available
+	if r.EventService == nil {
+		return nil, fmt.Errorf("event service unavailable")
+	}
+
+	// Get event by ID
+	event, err := r.EventService.GetEventByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get event: %w", err)
+	}
+
+	// Convert domain event to GraphQL event
+	return toGraphQLEvent(event), nil
 }
 
 // EventBySlug is the resolver for the eventBySlug field.
 func (r *queryResolver) EventBySlug(ctx context.Context, slug string) (*model.Event, error) {
-	panic(fmt.Errorf("not implemented: EventBySlug - eventBySlug"))
+	// Check if EventService is available
+	if r.EventService == nil {
+		return nil, fmt.Errorf("event service unavailable")
+	}
+
+	// Get event by slug
+	event, err := r.EventService.GetEventBySlug(ctx, slug)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get event: %w", err)
+	}
+
+	// Convert domain event to GraphQL event
+	return toGraphQLEvent(event), nil
 }
 
 // Events is the resolver for the events field.
 func (r *queryResolver) Events(ctx context.Context, filter *model.EventSearchFilter, sort *model.EventSortInput, first *int, after *string) (*model.EventConnection, error) {
-	panic(fmt.Errorf("not implemented: Events - events"))
+	// Check if EventService is available
+	if r.EventService == nil {
+		return nil, fmt.Errorf("event service unavailable")
+	}
+
+	// Set default values
+	limit := 20
+	offset := 0
+	if first != nil {
+		limit = *first
+	}
+
+	// For simplicity, we'll use offset-based pagination for now
+	// In production, cursor-based pagination would be preferred
+	if after != nil {
+		// Basic offset calculation from cursor - in production this would be more sophisticated
+		offset = 20 // Placeholder implementation
+	}
+
+	// Convert GraphQL filter to domain filter
+	domainFilter := event.EventSearchFilter{}
+	if filter != nil {
+		domainFilter = toDomainEventSearchFilter(*filter)
+	}
+
+	// Convert GraphQL sort to domain sort
+	var domainSort *event.EventSortInput
+	if sort != nil {
+		domainSort = toDomainEventSortInput(*sort)
+	}
+
+	// Search events
+	connection, err := r.EventService.SearchEvents(ctx, domainFilter, domainSort, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search events: %w", err)
+	}
+
+	// Convert domain connection to GraphQL connection
+	return toGraphQLEventConnection(connection), nil
 }
 
 // SearchEvents is the resolver for the searchEvents field.
 func (r *queryResolver) SearchEvents(ctx context.Context, query string, filter *model.EventSearchFilter, sort *model.EventSortInput, first *int, after *string) (*model.EventConnection, error) {
-	panic(fmt.Errorf("not implemented: SearchEvents - searchEvents"))
+	// Check if EventService is available
+	if r.EventService == nil {
+		return nil, fmt.Errorf("event service unavailable")
+	}
+
+	// Set default values
+	limit := 20
+	offset := 0
+	if first != nil {
+		limit = *first
+	}
+
+	// For simplicity, we'll use offset-based pagination for now
+	if after != nil {
+		offset = 20 // Placeholder implementation
+	}
+
+	// Convert GraphQL filter to domain filter
+	domainFilter := event.EventSearchFilter{
+		Query: &query, // Set the search query
+	}
+	if filter != nil {
+		// Merge additional filters
+		additionalFilter := toDomainEventSearchFilter(*filter)
+		domainFilter.Status = additionalFilter.Status
+		domainFilter.Categories = additionalFilter.Categories
+		domainFilter.TimeCommitment = additionalFilter.TimeCommitment
+		domainFilter.Tags = additionalFilter.Tags
+		domainFilter.Location = additionalFilter.Location
+		domainFilter.Skills = additionalFilter.Skills
+		domainFilter.Interests = additionalFilter.Interests
+	}
+
+	// Convert GraphQL sort to domain sort
+	var domainSort *event.EventSortInput
+	if sort != nil {
+		domainSort = toDomainEventSortInput(*sort)
+	}
+
+	// Search events
+	connection, err := r.EventService.SearchEvents(ctx, domainFilter, domainSort, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search events: %w", err)
+	}
+
+	// Convert domain connection to GraphQL connection
+	return toGraphQLEventConnection(connection), nil
 }
 
 // MyEvents is the resolver for the myEvents field.
 func (r *queryResolver) MyEvents(ctx context.Context, status []model.EventStatus, first *int, after *string) (*model.EventConnection, error) {
-	panic(fmt.Errorf("not implemented: MyEvents - myEvents"))
+	// Get current user from context
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("authentication required")
+	}
+
+	// Check if EventService is available
+	if r.EventService == nil {
+		return nil, fmt.Errorf("event service unavailable")
+	}
+
+	// Set default values
+	limit := 20
+	offset := 0
+	if first != nil {
+		limit = *first
+	}
+
+	if after != nil {
+		offset = 20 // Placeholder implementation
+	}
+
+	// Convert GraphQL status to domain status
+	domainStatus := make([]event.EventStatus, len(status))
+	for i, s := range status {
+		domainStatus[i] = convertGraphQLEventStatus(s)
+	}
+
+	// Get user's events
+	connection, err := r.EventService.GetUserEvents(ctx, userID, domainStatus, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user events: %w", err)
+	}
+
+	// Convert domain connection to GraphQL connection
+	return toGraphQLEventConnection(connection), nil
 }
 
 // NearbyEvents is the resolver for the nearbyEvents field.
 func (r *queryResolver) NearbyEvents(ctx context.Context, coordinates model.CoordinatesInput, radius float64, filter *model.EventSearchFilter, first *int, after *string) (*model.EventConnection, error) {
-	panic(fmt.Errorf("not implemented: NearbyEvents - nearbyEvents"))
+	// Check if EventService is available
+	if r.EventService == nil {
+		return nil, fmt.Errorf("event service unavailable")
+	}
+
+	// Set default values
+	limit := 20
+	offset := 0
+	if first != nil {
+		limit = *first
+	}
+
+	if after != nil {
+		offset = 20 // Placeholder implementation
+	}
+
+	// Convert GraphQL filter to domain filter
+	domainFilter := event.EventSearchFilter{}
+	if filter != nil {
+		domainFilter = toDomainEventSearchFilter(*filter)
+	}
+
+	// Search nearby events
+	connection, err := r.EventService.GetNearbyEvents(ctx, coordinates.Lat, coordinates.Lng, radius, domainFilter, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nearby events: %w", err)
+	}
+
+	// Convert domain connection to GraphQL connection
+	return toGraphQLEventConnection(connection), nil
 }
 
 // EventUpdates is the resolver for the eventUpdates field.

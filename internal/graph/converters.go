@@ -688,6 +688,143 @@ func convertGraphQLDaysOfWeek(days []model.DayOfWeek) []event.DayOfWeek {
 	return result
 }
 
+// toDomainEventSearchFilter converts GraphQL search filter to domain search filter
+func toDomainEventSearchFilter(filter model.EventSearchFilter) event.EventSearchFilter {
+	result := event.EventSearchFilter{
+		Query:     filter.Query,
+		Skills:    filter.Skills,
+		Interests: filter.Interests,
+		Tags:      filter.Tags,
+	}
+
+	// Convert status enums
+	if filter.Status != nil {
+		result.Status = make([]event.EventStatus, len(filter.Status))
+		for i, status := range filter.Status {
+			result.Status[i] = convertGraphQLEventStatus(status)
+		}
+	}
+
+	// Convert category enums to match existing field name "Categories"
+	if filter.Category != nil {
+		result.Categories = make([]event.EventCategory, len(filter.Category))
+		for i, category := range filter.Category {
+			result.Categories[i] = convertGraphQLEventCategory(category)
+		}
+	}
+
+	// Convert time commitment enums
+	if filter.TimeCommitment != nil {
+		result.TimeCommitment = make([]event.TimeCommitmentType, len(filter.TimeCommitment))
+		for i, tc := range filter.TimeCommitment {
+			result.TimeCommitment[i] = convertGraphQLTimeCommitmentType(tc)
+		}
+	}
+
+	// Convert location search
+	if filter.Location != nil {
+		result.Location = &event.LocationSearchInput{
+			Center: event.CoordinatesInput{
+				Latitude:  filter.Location.Coordinates.Lat,
+				Longitude: filter.Location.Coordinates.Lng,
+			},
+			Radius: *filter.Location.Radius,
+		}
+	}
+
+	// Convert date range
+	if filter.StartDate != nil && filter.EndDate != nil {
+		result.DateRange = &event.DateRangeInput{
+			StartDate: *filter.StartDate,
+			EndDate:   *filter.EndDate,
+		}
+	}
+
+	return result
+}
+
+// convertGraphQLEventStatus converts GraphQL EventStatus to domain EventStatus
+func convertGraphQLEventStatus(status model.EventStatus) event.EventStatus {
+	switch status {
+	case model.EventStatusDraft:
+		return event.EventStatusDraft
+	case model.EventStatusPublished:
+		return event.EventStatusPublished
+	case model.EventStatusCancelled:
+		return event.EventStatusCancelled
+	case model.EventStatusCompleted:
+		return event.EventStatusCompleted
+	case model.EventStatusArchived:
+		return event.EventStatusArchived
+	default:
+		return event.EventStatusDraft
+	}
+}
+
+// toDomainEventSortInput converts GraphQL sort input to domain sort parameters
+func toDomainEventSortInput(input model.EventSortInput) *event.EventSortInput {
+	return &event.EventSortInput{
+		Field:     convertGraphQLSortField(input.Field),
+		Direction: convertGraphQLSortDirection(input.Direction),
+	}
+} // convertGraphQLSortField converts GraphQL sort field to domain field
+func convertGraphQLSortField(field model.EventSortField) event.EventSortField {
+	switch field {
+	case model.EventSortFieldCreatedAt:
+		return event.EventSortFieldCreatedAt
+	case model.EventSortFieldTitle:
+		return event.EventSortFieldCreatedAt // No direct mapping, fall back to created_at
+	case model.EventSortFieldStartTime:
+		return event.EventSortFieldStartTime
+	case model.EventSortFieldCapacity:
+		return event.EventSortFieldCapacityRemaining
+	case model.EventSortFieldRegistrationCount:
+		return event.EventSortFieldPopularity
+	default:
+		return event.EventSortFieldCreatedAt
+	}
+}
+
+// convertGraphQLSortDirection converts GraphQL sort direction to domain direction
+func convertGraphQLSortDirection(direction model.SortDirection) event.SortDirection {
+	switch direction {
+	case model.SortDirectionAsc:
+		return event.SortDirectionASC
+	case model.SortDirectionDesc:
+		return event.SortDirectionDESC
+	default:
+		return event.SortDirectionDESC
+	}
+} // toGraphQLEventConnection converts domain EventConnection to GraphQL EventConnection
+func toGraphQLEventConnection(connection *event.EventConnection) *model.EventConnection {
+	if connection == nil {
+		return &model.EventConnection{
+			Edges:      []*model.EventEdge{},
+			PageInfo:   &model.PageInfo{},
+			TotalCount: 0,
+		}
+	}
+
+	edges := make([]*model.EventEdge, len(connection.Edges))
+	for i, edge := range connection.Edges {
+		edges[i] = &model.EventEdge{
+			Node:   toGraphQLEvent(&edge.Node),
+			Cursor: edge.Cursor,
+		}
+	}
+
+	return &model.EventConnection{
+		Edges: edges,
+		PageInfo: &model.PageInfo{
+			HasNextPage:     connection.PageInfo.HasNextPage,
+			HasPreviousPage: connection.PageInfo.HasPreviousPage,
+			StartCursor:     connection.PageInfo.StartCursor,
+			EndCursor:       connection.PageInfo.EndCursor,
+		},
+		TotalCount: connection.TotalCount,
+	}
+}
+
 func convertDomainDaysOfWeek(days []event.DayOfWeek) []model.DayOfWeek {
 	result := make([]model.DayOfWeek, len(days))
 	for i, day := range days {

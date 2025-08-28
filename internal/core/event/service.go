@@ -442,7 +442,105 @@ func (s *EventService) validateRegistrationSettings(settings RegistrationSetting
 	return nil
 }
 
-// Helper functions
+// GetEventByID retrieves an event by its ID
+func (s *EventService) GetEventByID(ctx context.Context, eventID string) (*Event, error) {
+	return s.repo.GetByID(ctx, eventID)
+}
+
+// GetEventBySlug retrieves an event by its slug
+func (s *EventService) GetEventBySlug(ctx context.Context, slug string) (*Event, error) {
+	return s.repo.GetBySlug(ctx, slug)
+}
+
+// SearchEvents searches for events with filters, sorting, and pagination
+func (s *EventService) SearchEvents(ctx context.Context, filter EventSearchFilter, sort *EventSortInput, limit, offset int) (*EventConnection, error) {
+	return s.repo.List(ctx, filter, sort, limit, offset)
+}
+
+// GetUserEvents retrieves events for a specific user
+func (s *EventService) GetUserEvents(ctx context.Context, userID string, statuses []EventStatus, limit, offset int) (*EventConnection, error) {
+	events, err := s.repo.GetByOrganizer(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user events: %w", err)
+	}
+
+	// Filter by status if provided
+	var filteredEvents []*Event
+	if len(statuses) > 0 {
+		statusMap := make(map[EventStatus]bool)
+		for _, status := range statuses {
+			statusMap[status] = true
+		}
+
+		for _, event := range events {
+			if statusMap[event.Status] {
+				filteredEvents = append(filteredEvents, event)
+			}
+		}
+	} else {
+		filteredEvents = events
+	}
+
+	// Apply pagination
+	start := offset
+	end := offset + limit
+	if start >= len(filteredEvents) {
+		filteredEvents = []*Event{}
+	} else {
+		if end > len(filteredEvents) {
+			end = len(filteredEvents)
+		}
+		filteredEvents = filteredEvents[start:end]
+	}
+
+	edges := make([]EventEdge, len(filteredEvents))
+	for i, event := range filteredEvents {
+		edges[i] = EventEdge{
+			Node:   *event,
+			Cursor: fmt.Sprintf("%d", offset+i),
+		}
+	}
+
+	return &EventConnection{
+		Edges:      edges,
+		PageInfo:   PageInfo{HasNextPage: end < len(events), HasPreviousPage: start > 0},
+		TotalCount: len(events),
+	}, nil
+}
+
+// GetNearbyEvents retrieves events near a specific location
+func (s *EventService) GetNearbyEvents(ctx context.Context, lat, lng, radius float64, filter EventSearchFilter, limit, offset int) (*EventConnection, error) {
+	events, err := s.repo.GetNearby(ctx, lat, lng, radius, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nearby events: %w", err)
+	}
+
+	// Apply offset
+	start := offset
+	if start >= len(events) {
+		events = []*Event{}
+	} else {
+		end := offset + limit
+		if end > len(events) {
+			end = len(events)
+		}
+		events = events[start:end]
+	}
+
+	edges := make([]EventEdge, len(events))
+	for i, event := range events {
+		edges[i] = EventEdge{
+			Node:   *event,
+			Cursor: fmt.Sprintf("%d", offset+i),
+		}
+	}
+
+	return &EventConnection{
+		Edges:      edges,
+		PageInfo:   PageInfo{HasNextPage: false, HasPreviousPage: offset > 0},
+		TotalCount: len(events),
+	}, nil
+} // Helper functions
 
 func generateSlug(title string) string {
 	// Convert to lowercase and replace spaces/special chars with hyphens

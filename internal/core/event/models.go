@@ -330,12 +330,14 @@ type RegistrationSettingsInput struct {
 // EventSearchFilter represents filters for event search
 type EventSearchFilter struct {
 	Query             *string              `json:"query,omitempty"`
+	Status            []EventStatus        `json:"status,omitempty"`
 	Location          *LocationSearchInput `json:"location,omitempty"`
 	DateRange         *DateRangeInput      `json:"dateRange,omitempty"`
 	Skills            []string             `json:"skills,omitempty"`
 	Interests         []string             `json:"interests,omitempty"`
 	Categories        []EventCategory      `json:"categories,omitempty"`
 	TimeCommitment    []TimeCommitmentType `json:"timeCommitment,omitempty"`
+	Tags              []string             `json:"tags,omitempty"`
 	HasAvailableSpots *bool                `json:"hasAvailableSpots,omitempty"`
 }
 
