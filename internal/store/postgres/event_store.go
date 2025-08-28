@@ -461,7 +461,67 @@ func (s *EventStorePG) GetFeatured(ctx context.Context, limit int) ([]*event.Eve
 }
 
 func (s *EventStorePG) GetNearby(ctx context.Context, lat, lng, radius float64, limit int) ([]*event.Event, error) {
-	return []*event.Event{}, nil // TODO: Implement
+	// Use Haversine formula for distance calculation in standard PostgreSQL
+	// Distance in kilometers
+	query := `
+		SELECT id, title, description, short_description, organizer_id, status,
+			start_time, end_time, location_name, location_address, location_city,
+			location_state, location_country, location_zip_code, location_latitude,
+			location_longitude, location_instructions, is_remote, min_capacity,
+			max_capacity, waitlist_enabled, minimum_age, background_check_required,
+			physical_requirements, category, time_commitment, tags, share_url, slug, 
+			registration_opens_at, registration_closes_at, created_at, updated_at,
+			(6371 * acos(cos(radians($1)) * cos(radians(location_latitude)) * 
+			 cos(radians(location_longitude) - radians($2)) + 
+			 sin(radians($1)) * sin(radians(location_latitude)))) AS distance
+		FROM events 
+		WHERE location_latitude IS NOT NULL 
+			AND location_longitude IS NOT NULL
+			AND status = 'PUBLISHED'
+			AND (6371 * acos(cos(radians($1)) * cos(radians(location_latitude)) * 
+				 cos(radians(location_longitude) - radians($2)) + 
+				 sin(radians($1)) * sin(radians(location_latitude)))) <= $3
+		ORDER BY distance
+		LIMIT $4`
+
+	rows, err := s.db.QueryContext(ctx, query, lat, lng, radius, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query nearby events: %w", err)
+	}
+	defer rows.Close()
+
+	var events []*event.Event
+	for rows.Next() {
+		e := &event.Event{}
+		var latitude, longitude *float64
+		err := rows.Scan(
+			&e.ID, &e.Title, &e.Description, &e.ShortDescription, &e.OrganizerID,
+			&e.Status, &e.StartTime, &e.EndTime, &e.Location.Name, &e.Location.Address,
+			&e.Location.City, &e.Location.State, &e.Location.Country, &e.Location.ZipCode,
+			&latitude, &longitude, &e.Location.Instructions, &e.Location.IsRemote,
+			&e.Capacity.Minimum, &e.Capacity.Maximum, &e.Capacity.WaitlistEnabled,
+			&e.Requirements.MinimumAge, &e.Requirements.BackgroundCheck,
+			&e.Requirements.PhysicalRequirements, &e.Category, &e.TimeCommitment,
+			pq.Array(&e.Tags), &e.ShareURL, &e.Slug,
+			&e.RegistrationSettings.OpensAt, &e.RegistrationSettings.ClosesAt,
+			&e.CreatedAt, &e.UpdatedAt, new(float64), // distance - we ignore this for now
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan event: %w", err)
+		}
+
+		// Set coordinates if they exist
+		if latitude != nil && longitude != nil {
+			e.Location.Coordinates = &event.Coordinates{
+				Latitude:  *latitude,
+				Longitude: *longitude,
+			}
+		}
+
+		events = append(events, e)
+	}
+
+	return events, rows.Err()
 }
 
 func (s *EventStorePG) UpdateStatus(ctx context.Context, eventID string, status event.EventStatus) error {

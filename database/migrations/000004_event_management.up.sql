@@ -1,9 +1,6 @@
 -- Phase 4: Event Management - Complete event system
 -- Using gen_random_uuid() for better randomness (available in PostgreSQL 13+)
 
--- Enable PostGIS for spatial queries (if not already enabled)
-CREATE EXTENSION IF NOT EXISTS postgis;
-
 -- Drop the existing simple events table if it exists
 DROP TABLE IF EXISTS events CASCADE;
 
@@ -149,10 +146,12 @@ CREATE INDEX idx_events_published_at ON events(published_at) WHERE published_at 
 CREATE INDEX idx_events_tags ON events USING GIN(tags);
 CREATE INDEX idx_events_slug ON events(slug) WHERE slug IS NOT NULL;
 
--- Spatial index for location queries (using PostGIS)
-CREATE INDEX idx_events_location_point ON events USING GIST(
-    ST_Point(location_longitude, location_latitude)
-) WHERE location_latitude IS NOT NULL AND location_longitude IS NOT NULL;
+-- Location indexes for geographic queries (using standard PostgreSQL)
+CREATE INDEX idx_events_location_lat_lng ON events(location_latitude, location_longitude) 
+    WHERE location_latitude IS NOT NULL AND location_longitude IS NOT NULL;
+CREATE INDEX idx_events_location_city ON events(location_city);
+CREATE INDEX idx_events_location_state ON events(location_state);
+CREATE INDEX idx_events_location_country ON events(location_country);
 
 -- Full-text search index
 CREATE INDEX idx_events_search ON events USING GIN(

@@ -540,7 +540,31 @@ func (s *EventService) GetNearbyEvents(ctx context.Context, lat, lng, radius flo
 		PageInfo:   PageInfo{HasNextPage: false, HasPreviousPage: offset > 0},
 		TotalCount: len(events),
 	}, nil
-} // Helper functions
+}
+
+// DeleteEvent deletes an event (soft delete by archiving)
+func (s *EventService) DeleteEvent(ctx context.Context, eventID string, userID string) error {
+	// Get the event to check authorization
+	event, err := s.repo.GetByID(ctx, eventID)
+	if err != nil {
+		return fmt.Errorf("failed to get event: %w", err)
+	}
+
+	// Check if user is the organizer
+	if event.OrganizerID != userID {
+		return fmt.Errorf("unauthorized: only the event organizer can delete this event")
+	}
+
+	// Perform the soft delete
+	err = s.repo.Delete(ctx, eventID)
+	if err != nil {
+		return fmt.Errorf("failed to delete event: %w", err)
+	}
+
+	return nil
+}
+
+// Helper functions
 
 func generateSlug(title string) string {
 	// Convert to lowercase and replace spaces/special chars with hyphens

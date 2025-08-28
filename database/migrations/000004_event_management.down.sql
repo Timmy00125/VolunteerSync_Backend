@@ -13,7 +13,3 @@ DROP TABLE IF EXISTS event_training_requirements CASCADE;
 DROP TABLE IF EXISTS event_interest_requirements CASCADE;
 DROP TABLE IF EXISTS event_skill_requirements CASCADE;
 DROP TABLE IF EXISTS events CASCADE;
-
--- Note: We keep PostGIS extension as it might be used by other features
--- If you want to remove it entirely, uncomment the line below
--- DROP EXTENSION IF EXISTS postgis;
