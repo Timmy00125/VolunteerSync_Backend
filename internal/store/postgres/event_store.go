@@ -17,6 +17,18 @@ type EventStorePG struct {
 	db *sql.DB
 }
 
+const eventSelectColumns = `
+	id, title, description, short_description, organizer_id, status,
+	start_time, end_time, location_name, location_address, location_city,
+	location_state, location_country, location_zip_code, location_latitude,
+	location_longitude, location_instructions, is_remote, min_capacity,
+	max_capacity, waitlist_enabled, minimum_age, background_check_required,
+	physical_requirements, category, time_commitment, tags,
+	registration_opens_at, registration_closes_at, requires_approval,
+	confirmation_required, cancellation_deadline, parent_event_id,
+	recurrence_rule, slug, share_url, created_at, updated_at, published_at
+`
+
 // NewEventStore creates a new PostgreSQL event store
 func NewEventStore(db *sql.DB) *EventStorePG {
 	return &EventStorePG{db: db}
@@ -107,15 +119,7 @@ func (s *EventStorePG) GetByID(ctx context.Context, id string) (*event.Event, er
 	e := &event.Event{}
 	query := `
 		SELECT 
-			id, title, description, short_description, organizer_id, status,
-			start_time, end_time, location_name, location_address, location_city,
-			location_state, location_country, location_zip_code, location_latitude,
-			location_longitude, location_instructions, is_remote, min_capacity,
-			max_capacity, waitlist_enabled, minimum_age, background_check_required,
-			physical_requirements, category, time_commitment, tags,
-			registration_opens_at, registration_closes_at, requires_approval,
-			confirmation_required, cancellation_deadline, parent_event_id,
-			recurrence_rule, slug, share_url, created_at, updated_at, published_at
+			` + eventSelectColumns + `
 		FROM events 
 		WHERE id = $1`
 
@@ -451,13 +455,94 @@ func (s *EventStorePG) buildConnection(events []*event.Event, totalCount, limit,
 	}
 }
 
-// Additional interface methods - placeholder implementations
+// Additional interface methods - implemented
 func (s *EventStorePG) GetByOrganizer(ctx context.Context, organizerID string) ([]*event.Event, error) {
-	return []*event.Event{}, nil // TODO: Implement
+	query := `
+		SELECT 
+			` + eventSelectColumns + `
+		FROM events 
+		WHERE organizer_id = $1 AND status != 'ARCHIVED'
+		ORDER BY created_at DESC`
+
+	rows, err := s.db.QueryContext(ctx, query, organizerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query events by organizer: %w", err)
+	}
+	defer rows.Close()
+
+	var events []*event.Event
+	for rows.Next() {
+		e := &event.Event{}
+		if err := s.scanEventFromRows(rows, e); err != nil {
+			return nil, fmt.Errorf("failed to scan event: %w", err)
+		}
+
+		// Load related data for each event
+		if err := s.loadEventRelations(ctx, e); err != nil {
+			return nil, fmt.Errorf("failed to load event relations: %w", err)
+		}
+
+		events = append(events, e)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return events, nil
 }
 
 func (s *EventStorePG) GetFeatured(ctx context.Context, limit int) ([]*event.Event, error) {
-	return []*event.Event{}, nil // TODO: Implement
+	// Featured events are determined by:
+	// 1. Published status
+	// 2. Future start time
+	// 3. High registration count or recent creation
+	// 4. Ordered by start time
+	query := `
+		SELECT 
+			e.` + eventSelectColumns + `
+		FROM events e
+		LEFT JOIN (
+			SELECT event_id, COUNT(*) as registration_count
+			FROM registrations 
+			WHERE status = 'CONFIRMED'
+			GROUP BY event_id
+		) r ON e.id = r.event_id
+		WHERE e.status = 'PUBLISHED' 
+			AND e.start_time > NOW()
+			AND e.registration_opens_at <= NOW()
+		ORDER BY 
+			COALESCE(r.registration_count, 0) DESC,
+			e.created_at DESC,
+			e.start_time ASC
+		LIMIT $1`
+
+	rows, err := s.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query featured events: %w", err)
+	}
+	defer rows.Close()
+
+	var events []*event.Event
+	for rows.Next() {
+		e := &event.Event{}
+		if err := s.scanEventFromRows(rows, e); err != nil {
+			return nil, fmt.Errorf("failed to scan event: %w", err)
+		}
+
+		// Load related data for each event
+		if err := s.loadEventRelations(ctx, e); err != nil {
+			return nil, fmt.Errorf("failed to load event relations: %w", err)
+		}
+
+		events = append(events, e)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return events, nil
 }
 
 func (s *EventStorePG) GetNearby(ctx context.Context, lat, lng, radius float64, limit int) ([]*event.Event, error) {
@@ -465,15 +550,7 @@ func (s *EventStorePG) GetNearby(ctx context.Context, lat, lng, radius float64, 
 	// Distance in kilometers
 	query := `
 		SELECT 
-			id, title, description, short_description, organizer_id, status,
-			start_time, end_time, location_name, location_address, location_city,
-			location_state, location_country, location_zip_code, location_latitude,
-			location_longitude, location_instructions, is_remote, min_capacity,
-			max_capacity, waitlist_enabled, minimum_age, background_check_required,
-			physical_requirements, category, time_commitment, tags,
-			registration_opens_at, registration_closes_at, requires_approval,
-			confirmation_required, cancellation_deadline, parent_event_id,
-			recurrence_rule, slug, share_url, created_at, updated_at, published_at,
+			` + eventSelectColumns + `,
 			(6371 * acos(cos(radians($1)) * cos(radians(location_latitude)) * 
 			 cos(radians(location_longitude) - radians($2)) + 
 			 sin(radians($1)) * sin(radians(location_latitude)))) AS distance
@@ -554,7 +631,40 @@ func (s *EventStorePG) UpdateStatus(ctx context.Context, eventID string, status 
 }
 
 func (s *EventStorePG) GetByStatus(ctx context.Context, status event.EventStatus, limit, offset int) ([]*event.Event, error) {
-	return []*event.Event{}, nil // TODO: Implement
+	query := `
+		SELECT 
+			` + eventSelectColumns + `
+		FROM events 
+		WHERE status = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3`
+
+	rows, err := s.db.QueryContext(ctx, query, status, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query events by status: %w", err)
+	}
+	defer rows.Close()
+
+	var events []*event.Event
+	for rows.Next() {
+		e := &event.Event{}
+		if err := s.scanEventFromRows(rows, e); err != nil {
+			return nil, fmt.Errorf("failed to scan event: %w", err)
+		}
+
+		// Load related data for each event
+		if err := s.loadEventRelations(ctx, e); err != nil {
+			return nil, fmt.Errorf("failed to load event relations: %w", err)
+		}
+
+		events = append(events, e)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return events, nil
 }
 
 // Skill requirement methods
@@ -962,11 +1072,78 @@ func (s *EventStorePG) GetUpdateHistory(ctx context.Context, eventID string, lim
 
 // Recurring event methods
 func (s *EventStorePG) GetEventInstances(ctx context.Context, parentEventID string) ([]*event.Event, error) {
-	return []*event.Event{}, nil // TODO: Implement
+	query := `
+		SELECT 
+			` + eventSelectColumns + `
+		FROM events 
+		WHERE parent_event_id = $1 AND status != 'ARCHIVED'
+		ORDER BY start_time ASC`
+
+	rows, err := s.db.QueryContext(ctx, query, parentEventID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query event instances: %w", err)
+	}
+	defer rows.Close()
+
+	var events []*event.Event
+	for rows.Next() {
+		e := &event.Event{}
+		if err := s.scanEventFromRows(rows, e); err != nil {
+			return nil, fmt.Errorf("failed to scan event: %w", err)
+		}
+
+		// Load related data for each event
+		if err := s.loadEventRelations(ctx, e); err != nil {
+			return nil, fmt.Errorf("failed to load event relations: %w", err)
+		}
+
+		events = append(events, e)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return events, nil
 }
 
 func (s *EventStorePG) GetUpcomingInstances(ctx context.Context, parentEventID string, limit int) ([]*event.Event, error) {
-	return []*event.Event{}, nil // TODO: Implement
+	query := `
+		SELECT 
+			` + eventSelectColumns + `
+		FROM events 
+		WHERE parent_event_id = $1 
+			AND status IN ('PUBLISHED', 'DRAFT') 
+			AND start_time > NOW()
+		ORDER BY start_time ASC
+		LIMIT $2`
+
+	rows, err := s.db.QueryContext(ctx, query, parentEventID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query upcoming event instances: %w", err)
+	}
+	defer rows.Close()
+
+	var events []*event.Event
+	for rows.Next() {
+		e := &event.Event{}
+		if err := s.scanEventFromRows(rows, e); err != nil {
+			return nil, fmt.Errorf("failed to scan event: %w", err)
+		}
+
+		// Load related data for each event
+		if err := s.loadEventRelations(ctx, e); err != nil {
+			return nil, fmt.Errorf("failed to load event relations: %w", err)
+		}
+
+		events = append(events, e)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return events, nil
 }
 
 // Capacity management methods
