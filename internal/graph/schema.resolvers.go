@@ -181,6 +181,145 @@ func (r *mutationResolver) ExportUserData(ctx context.Context) (string, error) {
 	panic(fmt.Errorf("not implemented: ExportUserData - exportUserData"))
 }
 
+// CreateEvent is the resolver for the createEvent field.
+func (r *mutationResolver) CreateEvent(ctx context.Context, input model.CreateEventInput) (*model.Event, error) {
+	// Get current user from context
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("authentication required")
+	}
+
+	// Check if EventService is available
+	if r.EventService == nil {
+		return nil, fmt.Errorf("event service unavailable")
+	}
+
+	// Convert GraphQL input to domain input
+	domainInput := toDomainCreateEventInput(input)
+
+	// Create event via service
+	event, err := r.EventService.CreateEvent(ctx, userID, domainInput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create event: %w", err)
+	}
+
+	// Convert domain event to GraphQL event
+	return toGraphQLEvent(event), nil
+}
+
+// UpdateEvent is the resolver for the updateEvent field.
+func (r *mutationResolver) UpdateEvent(ctx context.Context, id string, input model.UpdateEventInput) (*model.Event, error) {
+	// Get current user from context
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("authentication required")
+	}
+
+	// Check if EventService is available
+	if r.EventService == nil {
+		return nil, fmt.Errorf("event service unavailable")
+	}
+
+	// Convert GraphQL input to domain input
+	domainInput := toDomainUpdateEventInput(input)
+
+	// Update event via service
+	event, err := r.EventService.UpdateEvent(ctx, userID, id, domainInput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update event: %w", err)
+	}
+
+	// Convert domain event to GraphQL event
+	return toGraphQLEvent(event), nil
+}
+
+// PublishEvent is the resolver for the publishEvent field.
+func (r *mutationResolver) PublishEvent(ctx context.Context, id string) (*model.Event, error) {
+	// Get current user from context
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("authentication required")
+	}
+
+	// Check if EventService is available
+	if r.EventService == nil {
+		return nil, fmt.Errorf("event service unavailable")
+	}
+
+	// Publish event via service
+	event, err := r.EventService.PublishEvent(ctx, userID, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to publish event: %w", err)
+	}
+
+	// Convert domain event to GraphQL event
+	return toGraphQLEvent(event), nil
+}
+
+// CancelEvent is the resolver for the cancelEvent field.
+func (r *mutationResolver) CancelEvent(ctx context.Context, id string, reason *string) (*model.Event, error) {
+	// Get current user from context
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("authentication required")
+	}
+
+	// Check if EventService is available
+	if r.EventService == nil {
+		return nil, fmt.Errorf("event service unavailable")
+	}
+
+	// Convert reason pointer to string
+	reasonStr := ""
+	if reason != nil {
+		reasonStr = *reason
+	}
+
+	// Cancel event via service
+	event, err := r.EventService.CancelEvent(ctx, userID, id, reasonStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to cancel event: %w", err)
+	}
+
+	// Convert domain event to GraphQL event
+	return toGraphQLEvent(event), nil
+}
+
+// DeleteEvent is the resolver for the deleteEvent field.
+func (r *mutationResolver) DeleteEvent(ctx context.Context, id string) (bool, error) {
+	panic(fmt.Errorf("not implemented: DeleteEvent - deleteEvent"))
+}
+
+// AddEventImage is the resolver for the addEventImage field.
+func (r *mutationResolver) AddEventImage(ctx context.Context, eventID string, file graphql.Upload, altText *string, isPrimary *bool) (*model.EventImage, error) {
+	panic(fmt.Errorf("not implemented: AddEventImage - addEventImage"))
+}
+
+// UpdateEventImage is the resolver for the updateEventImage field.
+func (r *mutationResolver) UpdateEventImage(ctx context.Context, id string, altText *string, isPrimary *bool, displayOrder *int) (*model.EventImage, error) {
+	panic(fmt.Errorf("not implemented: UpdateEventImage - updateEventImage"))
+}
+
+// DeleteEventImage is the resolver for the deleteEventImage field.
+func (r *mutationResolver) DeleteEventImage(ctx context.Context, id string) (bool, error) {
+	panic(fmt.Errorf("not implemented: DeleteEventImage - deleteEventImage"))
+}
+
+// CreateEventAnnouncement is the resolver for the createEventAnnouncement field.
+func (r *mutationResolver) CreateEventAnnouncement(ctx context.Context, eventID string, title string, content string, isUrgent *bool) (*model.EventAnnouncement, error) {
+	panic(fmt.Errorf("not implemented: CreateEventAnnouncement - createEventAnnouncement"))
+}
+
+// UpdateEventAnnouncement is the resolver for the updateEventAnnouncement field.
+func (r *mutationResolver) UpdateEventAnnouncement(ctx context.Context, id string, title *string, content *string, isUrgent *bool) (*model.EventAnnouncement, error) {
+	panic(fmt.Errorf("not implemented: UpdateEventAnnouncement - updateEventAnnouncement"))
+}
+
+// DeleteEventAnnouncement is the resolver for the deleteEventAnnouncement field.
+func (r *mutationResolver) DeleteEventAnnouncement(ctx context.Context, id string) (bool, error) {
+	panic(fmt.Errorf("not implemented: DeleteEventAnnouncement - deleteEventAnnouncement"))
+}
+
 // Health is the resolver for the health field.
 func (r *queryResolver) Health(ctx context.Context) (*model.Health, error) {
 	return &model.Health{
@@ -278,6 +417,41 @@ func (r *queryResolver) UserActivity(ctx context.Context) ([]*model.ActivityLog,
 		out = append(out, &model.ActivityLog{ID: l.ID, Action: l.Action, CreatedAt: l.CreatedAt})
 	}
 	return out, nil
+}
+
+// Event is the resolver for the event field.
+func (r *queryResolver) Event(ctx context.Context, id string) (*model.Event, error) {
+	panic(fmt.Errorf("not implemented: Event - event"))
+}
+
+// EventBySlug is the resolver for the eventBySlug field.
+func (r *queryResolver) EventBySlug(ctx context.Context, slug string) (*model.Event, error) {
+	panic(fmt.Errorf("not implemented: EventBySlug - eventBySlug"))
+}
+
+// Events is the resolver for the events field.
+func (r *queryResolver) Events(ctx context.Context, filter *model.EventSearchFilter, sort *model.EventSortInput, first *int, after *string) (*model.EventConnection, error) {
+	panic(fmt.Errorf("not implemented: Events - events"))
+}
+
+// SearchEvents is the resolver for the searchEvents field.
+func (r *queryResolver) SearchEvents(ctx context.Context, query string, filter *model.EventSearchFilter, sort *model.EventSortInput, first *int, after *string) (*model.EventConnection, error) {
+	panic(fmt.Errorf("not implemented: SearchEvents - searchEvents"))
+}
+
+// MyEvents is the resolver for the myEvents field.
+func (r *queryResolver) MyEvents(ctx context.Context, status []model.EventStatus, first *int, after *string) (*model.EventConnection, error) {
+	panic(fmt.Errorf("not implemented: MyEvents - myEvents"))
+}
+
+// NearbyEvents is the resolver for the nearbyEvents field.
+func (r *queryResolver) NearbyEvents(ctx context.Context, coordinates model.CoordinatesInput, radius float64, filter *model.EventSearchFilter, first *int, after *string) (*model.EventConnection, error) {
+	panic(fmt.Errorf("not implemented: NearbyEvents - nearbyEvents"))
+}
+
+// EventUpdates is the resolver for the eventUpdates field.
+func (r *queryResolver) EventUpdates(ctx context.Context, eventID string, first *int, after *string) ([]*model.EventUpdate, error) {
+	panic(fmt.Errorf("not implemented: EventUpdates - eventUpdates"))
 }
 
 // Mutation returns generated.MutationResolver implementation.

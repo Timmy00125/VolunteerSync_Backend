@@ -29,14 +29,168 @@ type Coordinates struct {
 	Lng float64 `json:"lng"`
 }
 
+type CoordinatesInput struct {
+	Lat float64 `json:"lat"`
+	Lng float64 `json:"lng"`
+}
+
+type CreateEventInput struct {
+	Title                string                     `json:"title"`
+	Description          string                     `json:"description"`
+	ShortDescription     *string                    `json:"shortDescription,omitempty"`
+	StartTime            time.Time                  `json:"startTime"`
+	EndTime              time.Time                  `json:"endTime"`
+	Location             *EventLocationInput        `json:"location"`
+	Capacity             *EventCapacityInput        `json:"capacity"`
+	Requirements         *EventRequirementsInput    `json:"requirements,omitempty"`
+	Tags                 []string                   `json:"tags,omitempty"`
+	Category             EventCategory              `json:"category"`
+	TimeCommitment       TimeCommitmentType         `json:"timeCommitment"`
+	RecurrenceRule       *RecurrenceRuleInput       `json:"recurrenceRule,omitempty"`
+	RegistrationSettings *RegistrationSettingsInput `json:"registrationSettings"`
+}
+
 type Event struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	Description *string   `json:"description,omitempty"`
-	StartsAt    time.Time `json:"startsAt"`
-	EndsAt      time.Time `json:"endsAt"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID                   string                `json:"id"`
+	Title                string                `json:"title"`
+	Description          string                `json:"description"`
+	ShortDescription     *string               `json:"shortDescription,omitempty"`
+	Organizer            *User                 `json:"organizer"`
+	OrganizerID          string                `json:"organizerId"`
+	Status               EventStatus           `json:"status"`
+	StartTime            time.Time             `json:"startTime"`
+	EndTime              time.Time             `json:"endTime"`
+	Location             *EventLocation        `json:"location"`
+	Capacity             *EventCapacity        `json:"capacity"`
+	Requirements         *EventRequirements    `json:"requirements"`
+	Category             EventCategory         `json:"category"`
+	TimeCommitment       TimeCommitmentType    `json:"timeCommitment"`
+	Tags                 []string              `json:"tags"`
+	Slug                 *string               `json:"slug,omitempty"`
+	ShareURL             *string               `json:"shareURL,omitempty"`
+	RecurrenceRule       *RecurrenceRule       `json:"recurrenceRule,omitempty"`
+	RegistrationSettings *RegistrationSettings `json:"registrationSettings"`
+	Images               []*EventImage         `json:"images"`
+	Announcements        []*EventAnnouncement  `json:"announcements"`
+	CreatedAt            time.Time             `json:"createdAt"`
+	UpdatedAt            time.Time             `json:"updatedAt"`
+	CurrentRegistrations int                   `json:"currentRegistrations"`
+	AvailableSpots       int                   `json:"availableSpots"`
+	IsAtCapacity         bool                  `json:"isAtCapacity"`
+	CanRegister          bool                  `json:"canRegister"`
+}
+
+type EventAnnouncement struct {
+	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	Content   string    `json:"content"`
+	IsUrgent  bool      `json:"isUrgent"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type EventCapacity struct {
+	Minimum         int  `json:"minimum"`
+	Maximum         int  `json:"maximum"`
+	Current         int  `json:"current"`
+	WaitlistEnabled bool `json:"waitlistEnabled"`
+}
+
+type EventCapacityInput struct {
+	Minimum         int  `json:"minimum"`
+	Maximum         int  `json:"maximum"`
+	WaitlistEnabled bool `json:"waitlistEnabled"`
+}
+
+type EventConnection struct {
+	Edges      []*EventEdge `json:"edges"`
+	PageInfo   *PageInfo    `json:"pageInfo"`
+	TotalCount int          `json:"totalCount"`
+}
+
+type EventEdge struct {
+	Node   *Event `json:"node"`
+	Cursor string `json:"cursor"`
+}
+
+type EventImage struct {
+	ID           string  `json:"id"`
+	URL          string  `json:"url"`
+	AltText      *string `json:"altText,omitempty"`
+	IsPrimary    bool    `json:"isPrimary"`
+	DisplayOrder int     `json:"displayOrder"`
+}
+
+type EventLocation struct {
+	Name         string       `json:"name"`
+	Address      string       `json:"address"`
+	City         string       `json:"city"`
+	State        *string      `json:"state,omitempty"`
+	Country      string       `json:"country"`
+	ZipCode      *string      `json:"zipCode,omitempty"`
+	Coordinates  *Coordinates `json:"coordinates,omitempty"`
+	Instructions *string      `json:"instructions,omitempty"`
+	IsRemote     bool         `json:"isRemote"`
+}
+
+type EventLocationInput struct {
+	Name         string            `json:"name"`
+	Address      string            `json:"address"`
+	City         string            `json:"city"`
+	State        *string           `json:"state,omitempty"`
+	Country      string            `json:"country"`
+	ZipCode      *string           `json:"zipCode,omitempty"`
+	Coordinates  *CoordinatesInput `json:"coordinates,omitempty"`
+	Instructions *string           `json:"instructions,omitempty"`
+	IsRemote     bool              `json:"isRemote"`
+}
+
+type EventRequirements struct {
+	MinimumAge           *int                   `json:"minimumAge,omitempty"`
+	BackgroundCheck      bool                   `json:"backgroundCheck"`
+	PhysicalRequirements *string                `json:"physicalRequirements,omitempty"`
+	Skills               []*SkillRequirement    `json:"skills"`
+	Training             []*TrainingRequirement `json:"training"`
+	Interests            []string               `json:"interests"`
+}
+
+type EventRequirementsInput struct {
+	MinimumAge           *int                        `json:"minimumAge,omitempty"`
+	BackgroundCheck      bool                        `json:"backgroundCheck"`
+	PhysicalRequirements *string                     `json:"physicalRequirements,omitempty"`
+	Skills               []*SkillRequirementInput    `json:"skills,omitempty"`
+	Training             []*TrainingRequirementInput `json:"training,omitempty"`
+	Interests            []string                    `json:"interests,omitempty"`
+}
+
+type EventSearchFilter struct {
+	Query                   *string              `json:"query,omitempty"`
+	Status                  []EventStatus        `json:"status,omitempty"`
+	Category                []EventCategory      `json:"category,omitempty"`
+	TimeCommitment          []TimeCommitmentType `json:"timeCommitment,omitempty"`
+	OrganizerID             *string              `json:"organizerId,omitempty"`
+	Tags                    []string             `json:"tags,omitempty"`
+	StartDate               *time.Time           `json:"startDate,omitempty"`
+	EndDate                 *time.Time           `json:"endDate,omitempty"`
+	Location                *LocationSearchInput `json:"location,omitempty"`
+	Skills                  []string             `json:"skills,omitempty"`
+	Interests               []string             `json:"interests,omitempty"`
+	RequiresBackgroundCheck *bool                `json:"requiresBackgroundCheck,omitempty"`
+	MinimumAge              *int                 `json:"minimumAge,omitempty"`
+}
+
+type EventSortInput struct {
+	Field     EventSortField `json:"field"`
+	Direction SortDirection  `json:"direction"`
+}
+
+type EventUpdate struct {
+	ID         string     `json:"id"`
+	UpdatedBy  *User      `json:"updatedBy"`
+	FieldName  string     `json:"fieldName"`
+	OldValue   *string    `json:"oldValue,omitempty"`
+	NewValue   *string    `json:"newValue,omitempty"`
+	UpdateType UpdateType `json:"updateType"`
+	CreatedAt  time.Time  `json:"createdAt"`
 }
 
 type Health struct {
@@ -69,6 +223,14 @@ type LocationInput struct {
 	Lng     *float64 `json:"lng,omitempty"`
 }
 
+type LocationSearchInput struct {
+	City        *string           `json:"city,omitempty"`
+	State       *string           `json:"state,omitempty"`
+	Country     *string           `json:"country,omitempty"`
+	Radius      *float64          `json:"radius,omitempty"`
+	Coordinates *CoordinatesInput `json:"coordinates,omitempty"`
+}
+
 type LoginInput struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -93,6 +255,13 @@ type NotificationPreferencesInput struct {
 	EventReminders         *bool `json:"eventReminders,omitempty"`
 	NewOpportunities       *bool `json:"newOpportunities,omitempty"`
 	NewsletterSubscription *bool `json:"newsletterSubscription,omitempty"`
+}
+
+type PageInfo struct {
+	HasNextPage     bool    `json:"hasNextPage"`
+	HasPreviousPage bool    `json:"hasPreviousPage"`
+	StartCursor     *string `json:"startCursor,omitempty"`
+	EndCursor       *string `json:"endCursor,omitempty"`
 }
 
 type PrivacySettings struct {
@@ -123,6 +292,24 @@ type PublicProfile struct {
 type Query struct {
 }
 
+type RecurrenceRule struct {
+	Frequency       RecurrenceFrequency `json:"frequency"`
+	Interval        int                 `json:"interval"`
+	DaysOfWeek      []DayOfWeek         `json:"daysOfWeek,omitempty"`
+	DayOfMonth      *int                `json:"dayOfMonth,omitempty"`
+	EndDate         *time.Time          `json:"endDate,omitempty"`
+	OccurrenceCount *int                `json:"occurrenceCount,omitempty"`
+}
+
+type RecurrenceRuleInput struct {
+	Frequency       RecurrenceFrequency `json:"frequency"`
+	Interval        int                 `json:"interval"`
+	DaysOfWeek      []DayOfWeek         `json:"daysOfWeek,omitempty"`
+	DayOfMonth      *int                `json:"dayOfMonth,omitempty"`
+	EndDate         *time.Time          `json:"endDate,omitempty"`
+	OccurrenceCount *int                `json:"occurrenceCount,omitempty"`
+}
+
 type RefreshTokenInput struct {
 	RefreshToken string `json:"refreshToken"`
 }
@@ -131,6 +318,24 @@ type RegisterInput struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+type RegistrationSettings struct {
+	OpensAt              *time.Time `json:"opensAt,omitempty"`
+	ClosesAt             time.Time  `json:"closesAt"`
+	RequiresApproval     bool       `json:"requiresApproval"`
+	AllowWaitlist        bool       `json:"allowWaitlist"`
+	ConfirmationRequired bool       `json:"confirmationRequired"`
+	CancellationDeadline *time.Time `json:"cancellationDeadline,omitempty"`
+}
+
+type RegistrationSettingsInput struct {
+	OpensAt              *time.Time `json:"opensAt,omitempty"`
+	ClosesAt             time.Time  `json:"closesAt"`
+	RequiresApproval     bool       `json:"requiresApproval"`
+	AllowWaitlist        bool       `json:"allowWaitlist"`
+	ConfirmationRequired bool       `json:"confirmationRequired"`
+	CancellationDeadline *time.Time `json:"cancellationDeadline,omitempty"`
 }
 
 type Skill struct {
@@ -143,6 +348,44 @@ type Skill struct {
 type SkillInput struct {
 	Name        string           `json:"name"`
 	Proficiency SkillProficiency `json:"proficiency"`
+}
+
+type SkillRequirement struct {
+	ID          string           `json:"id"`
+	Skill       string           `json:"skill"`
+	Proficiency SkillProficiency `json:"proficiency"`
+	Required    bool             `json:"required"`
+}
+
+type SkillRequirementInput struct {
+	Skill       string           `json:"skill"`
+	Proficiency SkillProficiency `json:"proficiency"`
+	Required    bool             `json:"required"`
+}
+
+type TrainingRequirement struct {
+	ID                  string  `json:"id"`
+	Name                string  `json:"name"`
+	Description         *string `json:"description,omitempty"`
+	Required            bool    `json:"required"`
+	ProvidedByOrganizer bool    `json:"providedByOrganizer"`
+}
+
+type TrainingRequirementInput struct {
+	Name                string  `json:"name"`
+	Description         *string `json:"description,omitempty"`
+	Required            bool    `json:"required"`
+	ProvidedByOrganizer bool    `json:"providedByOrganizer"`
+}
+
+type UpdateEventInput struct {
+	Title            *string                 `json:"title,omitempty"`
+	Description      *string                 `json:"description,omitempty"`
+	ShortDescription *string                 `json:"shortDescription,omitempty"`
+	Location         *EventLocationInput     `json:"location,omitempty"`
+	Requirements     *EventRequirementsInput `json:"requirements,omitempty"`
+	Tags             []string                `json:"tags,omitempty"`
+	Category         *EventCategory          `json:"category,omitempty"`
 }
 
 type UpdateProfileInput struct {
@@ -237,6 +480,276 @@ func (e *AvailabilityStatus) UnmarshalJSON(b []byte) error {
 }
 
 func (e AvailabilityStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type DayOfWeek string
+
+const (
+	DayOfWeekSunday    DayOfWeek = "SUNDAY"
+	DayOfWeekMonday    DayOfWeek = "MONDAY"
+	DayOfWeekTuesday   DayOfWeek = "TUESDAY"
+	DayOfWeekWednesday DayOfWeek = "WEDNESDAY"
+	DayOfWeekThursday  DayOfWeek = "THURSDAY"
+	DayOfWeekFriday    DayOfWeek = "FRIDAY"
+	DayOfWeekSaturday  DayOfWeek = "SATURDAY"
+)
+
+var AllDayOfWeek = []DayOfWeek{
+	DayOfWeekSunday,
+	DayOfWeekMonday,
+	DayOfWeekTuesday,
+	DayOfWeekWednesday,
+	DayOfWeekThursday,
+	DayOfWeekFriday,
+	DayOfWeekSaturday,
+}
+
+func (e DayOfWeek) IsValid() bool {
+	switch e {
+	case DayOfWeekSunday, DayOfWeekMonday, DayOfWeekTuesday, DayOfWeekWednesday, DayOfWeekThursday, DayOfWeekFriday, DayOfWeekSaturday:
+		return true
+	}
+	return false
+}
+
+func (e DayOfWeek) String() string {
+	return string(e)
+}
+
+func (e *DayOfWeek) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DayOfWeek(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DayOfWeek", str)
+	}
+	return nil
+}
+
+func (e DayOfWeek) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DayOfWeek) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DayOfWeek) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type EventCategory string
+
+const (
+	EventCategoryCommunityService EventCategory = "COMMUNITY_SERVICE"
+	EventCategoryEnvironmental    EventCategory = "ENVIRONMENTAL"
+	EventCategoryEducation        EventCategory = "EDUCATION"
+	EventCategoryHealthWellness   EventCategory = "HEALTH_WELLNESS"
+	EventCategoryDisasterRelief   EventCategory = "DISASTER_RELIEF"
+	EventCategoryAnimalWelfare    EventCategory = "ANIMAL_WELFARE"
+	EventCategoryArtsCulture      EventCategory = "ARTS_CULTURE"
+	EventCategoryTechnology       EventCategory = "TECHNOLOGY"
+	EventCategorySportsRecreation EventCategory = "SPORTS_RECREATION"
+	EventCategoryFoodHunger       EventCategory = "FOOD_HUNGER"
+	EventCategoryYouthDevelopment EventCategory = "YOUTH_DEVELOPMENT"
+	EventCategorySeniorCare       EventCategory = "SENIOR_CARE"
+	EventCategoryHomelessServices EventCategory = "HOMELESS_SERVICES"
+	EventCategoryFundraising      EventCategory = "FUNDRAISING"
+	EventCategoryAdvocacy         EventCategory = "ADVOCACY"
+	EventCategoryOther            EventCategory = "OTHER"
+)
+
+var AllEventCategory = []EventCategory{
+	EventCategoryCommunityService,
+	EventCategoryEnvironmental,
+	EventCategoryEducation,
+	EventCategoryHealthWellness,
+	EventCategoryDisasterRelief,
+	EventCategoryAnimalWelfare,
+	EventCategoryArtsCulture,
+	EventCategoryTechnology,
+	EventCategorySportsRecreation,
+	EventCategoryFoodHunger,
+	EventCategoryYouthDevelopment,
+	EventCategorySeniorCare,
+	EventCategoryHomelessServices,
+	EventCategoryFundraising,
+	EventCategoryAdvocacy,
+	EventCategoryOther,
+}
+
+func (e EventCategory) IsValid() bool {
+	switch e {
+	case EventCategoryCommunityService, EventCategoryEnvironmental, EventCategoryEducation, EventCategoryHealthWellness, EventCategoryDisasterRelief, EventCategoryAnimalWelfare, EventCategoryArtsCulture, EventCategoryTechnology, EventCategorySportsRecreation, EventCategoryFoodHunger, EventCategoryYouthDevelopment, EventCategorySeniorCare, EventCategoryHomelessServices, EventCategoryFundraising, EventCategoryAdvocacy, EventCategoryOther:
+		return true
+	}
+	return false
+}
+
+func (e EventCategory) String() string {
+	return string(e)
+}
+
+func (e *EventCategory) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = EventCategory(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid EventCategory", str)
+	}
+	return nil
+}
+
+func (e EventCategory) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *EventCategory) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e EventCategory) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type EventSortField string
+
+const (
+	EventSortFieldCreatedAt         EventSortField = "CREATED_AT"
+	EventSortFieldStartTime         EventSortField = "START_TIME"
+	EventSortFieldTitle             EventSortField = "TITLE"
+	EventSortFieldCapacity          EventSortField = "CAPACITY"
+	EventSortFieldRegistrationCount EventSortField = "REGISTRATION_COUNT"
+)
+
+var AllEventSortField = []EventSortField{
+	EventSortFieldCreatedAt,
+	EventSortFieldStartTime,
+	EventSortFieldTitle,
+	EventSortFieldCapacity,
+	EventSortFieldRegistrationCount,
+}
+
+func (e EventSortField) IsValid() bool {
+	switch e {
+	case EventSortFieldCreatedAt, EventSortFieldStartTime, EventSortFieldTitle, EventSortFieldCapacity, EventSortFieldRegistrationCount:
+		return true
+	}
+	return false
+}
+
+func (e EventSortField) String() string {
+	return string(e)
+}
+
+func (e *EventSortField) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = EventSortField(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid EventSortField", str)
+	}
+	return nil
+}
+
+func (e EventSortField) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *EventSortField) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e EventSortField) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type EventStatus string
+
+const (
+	EventStatusDraft     EventStatus = "DRAFT"
+	EventStatusPublished EventStatus = "PUBLISHED"
+	EventStatusCancelled EventStatus = "CANCELLED"
+	EventStatusCompleted EventStatus = "COMPLETED"
+	EventStatusArchived  EventStatus = "ARCHIVED"
+)
+
+var AllEventStatus = []EventStatus{
+	EventStatusDraft,
+	EventStatusPublished,
+	EventStatusCancelled,
+	EventStatusCompleted,
+	EventStatusArchived,
+}
+
+func (e EventStatus) IsValid() bool {
+	switch e {
+	case EventStatusDraft, EventStatusPublished, EventStatusCancelled, EventStatusCompleted, EventStatusArchived:
+		return true
+	}
+	return false
+}
+
+func (e EventStatus) String() string {
+	return string(e)
+}
+
+func (e *EventStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = EventStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid EventStatus", str)
+	}
+	return nil
+}
+
+func (e EventStatus) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *EventStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e EventStatus) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
@@ -423,6 +936,65 @@ func (e ProfileVisibility) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+type RecurrenceFrequency string
+
+const (
+	RecurrenceFrequencyDaily   RecurrenceFrequency = "DAILY"
+	RecurrenceFrequencyWeekly  RecurrenceFrequency = "WEEKLY"
+	RecurrenceFrequencyMonthly RecurrenceFrequency = "MONTHLY"
+	RecurrenceFrequencyYearly  RecurrenceFrequency = "YEARLY"
+)
+
+var AllRecurrenceFrequency = []RecurrenceFrequency{
+	RecurrenceFrequencyDaily,
+	RecurrenceFrequencyWeekly,
+	RecurrenceFrequencyMonthly,
+	RecurrenceFrequencyYearly,
+}
+
+func (e RecurrenceFrequency) IsValid() bool {
+	switch e {
+	case RecurrenceFrequencyDaily, RecurrenceFrequencyWeekly, RecurrenceFrequencyMonthly, RecurrenceFrequencyYearly:
+		return true
+	}
+	return false
+}
+
+func (e RecurrenceFrequency) String() string {
+	return string(e)
+}
+
+func (e *RecurrenceFrequency) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RecurrenceFrequency(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RecurrenceFrequency", str)
+	}
+	return nil
+}
+
+func (e RecurrenceFrequency) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RecurrenceFrequency) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RecurrenceFrequency) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 type SkillProficiency string
 
 const (
@@ -477,6 +1049,183 @@ func (e *SkillProficiency) UnmarshalJSON(b []byte) error {
 }
 
 func (e SkillProficiency) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type SortDirection string
+
+const (
+	SortDirectionAsc  SortDirection = "ASC"
+	SortDirectionDesc SortDirection = "DESC"
+)
+
+var AllSortDirection = []SortDirection{
+	SortDirectionAsc,
+	SortDirectionDesc,
+}
+
+func (e SortDirection) IsValid() bool {
+	switch e {
+	case SortDirectionAsc, SortDirectionDesc:
+		return true
+	}
+	return false
+}
+
+func (e SortDirection) String() string {
+	return string(e)
+}
+
+func (e *SortDirection) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SortDirection(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SortDirection", str)
+	}
+	return nil
+}
+
+func (e SortDirection) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SortDirection) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SortDirection) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type TimeCommitmentType string
+
+const (
+	TimeCommitmentTypeOneTime  TimeCommitmentType = "ONE_TIME"
+	TimeCommitmentTypeWeekly   TimeCommitmentType = "WEEKLY"
+	TimeCommitmentTypeMonthly  TimeCommitmentType = "MONTHLY"
+	TimeCommitmentTypeSeasonal TimeCommitmentType = "SEASONAL"
+	TimeCommitmentTypeOngoing  TimeCommitmentType = "ONGOING"
+)
+
+var AllTimeCommitmentType = []TimeCommitmentType{
+	TimeCommitmentTypeOneTime,
+	TimeCommitmentTypeWeekly,
+	TimeCommitmentTypeMonthly,
+	TimeCommitmentTypeSeasonal,
+	TimeCommitmentTypeOngoing,
+}
+
+func (e TimeCommitmentType) IsValid() bool {
+	switch e {
+	case TimeCommitmentTypeOneTime, TimeCommitmentTypeWeekly, TimeCommitmentTypeMonthly, TimeCommitmentTypeSeasonal, TimeCommitmentTypeOngoing:
+		return true
+	}
+	return false
+}
+
+func (e TimeCommitmentType) String() string {
+	return string(e)
+}
+
+func (e *TimeCommitmentType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = TimeCommitmentType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid TimeCommitmentType", str)
+	}
+	return nil
+}
+
+func (e TimeCommitmentType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *TimeCommitmentType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e TimeCommitmentType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type UpdateType string
+
+const (
+	UpdateTypeCreated   UpdateType = "CREATED"
+	UpdateTypeUpdated   UpdateType = "UPDATED"
+	UpdateTypePublished UpdateType = "PUBLISHED"
+	UpdateTypeCancelled UpdateType = "CANCELLED"
+	UpdateTypeCompleted UpdateType = "COMPLETED"
+)
+
+var AllUpdateType = []UpdateType{
+	UpdateTypeCreated,
+	UpdateTypeUpdated,
+	UpdateTypePublished,
+	UpdateTypeCancelled,
+	UpdateTypeCompleted,
+}
+
+func (e UpdateType) IsValid() bool {
+	switch e {
+	case UpdateTypeCreated, UpdateTypeUpdated, UpdateTypePublished, UpdateTypeCancelled, UpdateTypeCompleted:
+		return true
+	}
+	return false
+}
+
+func (e UpdateType) String() string {
+	return string(e)
+}
+
+func (e *UpdateType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = UpdateType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid UpdateType", str)
+	}
+	return nil
+}
+
+func (e UpdateType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *UpdateType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e UpdateType) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/volunteersync/backend/internal/core/auth"
+	"github.com/volunteersync/backend/internal/core/event"
 	usercore "github.com/volunteersync/backend/internal/core/user"
 )
 
@@ -13,4 +14,5 @@ type Resolver struct {
 	AuthService  *auth.AuthService
 	OAuthService *auth.OAuthService
 	UserService  *usercore.Service
+	EventService *event.EventService
 }
