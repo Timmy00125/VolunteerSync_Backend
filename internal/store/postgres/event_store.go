@@ -464,13 +464,16 @@ func (s *EventStorePG) GetNearby(ctx context.Context, lat, lng, radius float64, 
 	// Use Haversine formula for distance calculation in standard PostgreSQL
 	// Distance in kilometers
 	query := `
-		SELECT id, title, description, short_description, organizer_id, status,
+		SELECT 
+			id, title, description, short_description, organizer_id, status,
 			start_time, end_time, location_name, location_address, location_city,
 			location_state, location_country, location_zip_code, location_latitude,
 			location_longitude, location_instructions, is_remote, min_capacity,
 			max_capacity, waitlist_enabled, minimum_age, background_check_required,
-			physical_requirements, category, time_commitment, tags, share_url, slug, 
-			registration_opens_at, registration_closes_at, created_at, updated_at,
+			physical_requirements, category, time_commitment, tags,
+			registration_opens_at, registration_closes_at, requires_approval,
+			confirmation_required, cancellation_deadline, parent_event_id,
+			recurrence_rule, slug, share_url, created_at, updated_at, published_at,
 			(6371 * acos(cos(radians($1)) * cos(radians(location_latitude)) * 
 			 cos(radians(location_longitude) - radians($2)) + 
 			 sin(radians($1)) * sin(radians(location_latitude)))) AS distance
@@ -493,35 +496,56 @@ func (s *EventStorePG) GetNearby(ctx context.Context, lat, lng, radius float64, 
 	var events []*event.Event
 	for rows.Next() {
 		e := &event.Event{}
-		var latitude, longitude *float64
-		err := rows.Scan(
-			&e.ID, &e.Title, &e.Description, &e.ShortDescription, &e.OrganizerID,
-			&e.Status, &e.StartTime, &e.EndTime, &e.Location.Name, &e.Location.Address,
-			&e.Location.City, &e.Location.State, &e.Location.Country, &e.Location.ZipCode,
-			&latitude, &longitude, &e.Location.Instructions, &e.Location.IsRemote,
-			&e.Capacity.Minimum, &e.Capacity.Maximum, &e.Capacity.WaitlistEnabled,
-			&e.Requirements.MinimumAge, &e.Requirements.BackgroundCheck,
-			&e.Requirements.PhysicalRequirements, &e.Category, &e.TimeCommitment,
-			pq.Array(&e.Tags), &e.ShareURL, &e.Slug,
+		var latNull, lngNull sql.NullFloat64
+		var recurrenceJSON []byte
+		var tags pq.StringArray
+		var distance float64
+
+		if err := rows.Scan(
+			&e.ID, &e.Title, &e.Description, &e.ShortDescription, &e.OrganizerID, &e.Status,
+			&e.StartTime, &e.EndTime, &e.Location.Name, &e.Location.Address, &e.Location.City,
+			&e.Location.State, &e.Location.Country, &e.Location.ZipCode, &latNull, &lngNull,
+			&e.Location.Instructions, &e.Location.IsRemote, &e.Capacity.Minimum,
+			&e.Capacity.Maximum, &e.Capacity.WaitlistEnabled, &e.Requirements.MinimumAge,
+			&e.Requirements.BackgroundCheck, &e.Requirements.PhysicalRequirements,
+			&e.Category, &e.TimeCommitment, &tags,
 			&e.RegistrationSettings.OpensAt, &e.RegistrationSettings.ClosesAt,
-			&e.CreatedAt, &e.UpdatedAt, new(float64), // distance - we ignore this for now
-		)
-		if err != nil {
+			&e.RegistrationSettings.RequiresApproval, &e.RegistrationSettings.ConfirmationRequired,
+			&e.RegistrationSettings.CancellationDeadline, &e.ParentEventID,
+			&recurrenceJSON, &e.Slug, &e.ShareURL, &e.CreatedAt, &e.UpdatedAt, &e.PublishedAt,
+			&distance,
+		); err != nil {
 			return nil, fmt.Errorf("failed to scan event: %w", err)
 		}
 
-		// Set coordinates if they exist
-		if latitude != nil && longitude != nil {
+		// Set coordinates if available
+		if latNull.Valid && lngNull.Valid {
 			e.Location.Coordinates = &event.Coordinates{
-				Latitude:  *latitude,
-				Longitude: *longitude,
+				Latitude:  latNull.Float64,
+				Longitude: lngNull.Float64,
+			}
+		} else {
+			e.Location.Coordinates = nil
+		}
+
+		e.Tags = []string(tags)
+
+		// Parse recurrence rule
+		if len(recurrenceJSON) > 0 {
+			var rule event.RecurrenceRule
+			if err := json.Unmarshal(recurrenceJSON, &rule); err == nil {
+				e.RecurrenceRule = &rule
 			}
 		}
 
 		events = append(events, e)
 	}
 
-	return events, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return events, nil
 }
 
 func (s *EventStorePG) UpdateStatus(ctx context.Context, eventID string, status event.EventStatus) error {
