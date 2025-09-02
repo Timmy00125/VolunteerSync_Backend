@@ -20,6 +20,7 @@ import (
 	"github.com/volunteersync/backend/internal/config"
 	authcore "github.com/volunteersync/backend/internal/core/auth"
 	eventcore "github.com/volunteersync/backend/internal/core/event"
+	registrationcore "github.com/volunteersync/backend/internal/core/registration"
 	usercore "github.com/volunteersync/backend/internal/core/user"
 	"github.com/volunteersync/backend/internal/graph"
 	"github.com/volunteersync/backend/internal/graph/generated"
@@ -161,10 +162,19 @@ func setupRoutes(r *gin.Engine, db *sql.DB, cfg *config.Config) {
 		eventSvc = eventcore.NewEventService(eventStore)
 	}
 
+	// Wire registration service
+	var registrationSvc *registrationcore.Service
+	{
+		// Postgres registration store
+		registrationStore := pg.NewRegistrationStore(db)
+		logger := slog.Default()
+		registrationSvc = registrationcore.NewService(registrationStore, eventSvc, userSvc, logger)
+	}
+
 	// Auth middleware
 	authMW := mw.NewAuthMiddleware(authSvc, slog.Default())
 
-	gql := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{DB: db, UserService: userSvc, EventService: eventSvc}}))
+	gql := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{DB: db, UserService: userSvc, EventService: eventSvc, RegistrationService: registrationSvc}}))
 	r.POST("/graphql", authMW.OptionalAuth(), gin.WrapH(gql))
 	r.GET("/graphql", authMW.OptionalAuth(), func(c *gin.Context) {
 		playground.Handler("GraphQL", "/graphql").ServeHTTP(c.Writer, c.Request)
