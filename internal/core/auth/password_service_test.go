@@ -400,8 +400,7 @@ func BenchmarkPasswordService_HashPassword(b *testing.B) {
 	ps := NewPasswordService(12)
 	password := "TestPassword123!"
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := ps.HashPassword(password)
 		if err != nil {
 			b.Fatalf("HashPassword failed: %v", err)
@@ -418,7 +417,7 @@ func BenchmarkPasswordService_VerifyPassword(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := ps.VerifyPassword(hash, password)
 		if err != nil {
 			b.Fatalf("VerifyPassword failed: %v", err)

@@ -52,7 +52,7 @@ func TestOpen(t *testing.T) {
 		}
 
 		db, err := Open(opts)
-		
+
 		assert.Error(t, err)
 		assert.Nil(t, db)
 	})
@@ -88,14 +88,14 @@ func TestMigrateUp(t *testing.T) {
 		db, err := Open(opts)
 		if err == nil {
 			defer db.Close()
-			
+
 			// Check that some expected tables exist
 			tables := []string{"users", "events", "event_registrations"}
 			for _, table := range tables {
 				var exists bool
 				query := `SELECT EXISTS (
-					SELECT FROM information_schema.tables 
-					WHERE table_schema = 'public' 
+					SELECT FROM information_schema.tables
+					WHERE table_schema = 'public'
 					AND table_name = $1
 				)`
 				err := db.QueryRow(query, table).Scan(&exists)
@@ -209,7 +209,7 @@ func TestConnectionPooling(t *testing.T) {
 
 	t.Run("connection pool settings", func(t *testing.T) {
 		stats := db.Stats()
-		
+
 		// Verify pool settings are applied
 		assert.Equal(t, 25, stats.MaxOpenConnections)
 		// Note: MaxIdleConnections field doesn't exist in all Go versions, just check it's reasonable
@@ -219,8 +219,8 @@ func TestConnectionPooling(t *testing.T) {
 	t.Run("concurrent connections", func(t *testing.T) {
 		// Test multiple concurrent queries
 		done := make(chan bool, 5)
-		
-		for i := 0; i < 5; i++ {
+
+		for range 5 {
 			go func() {
 				var result int
 				err := db.QueryRow("SELECT 1").Scan(&result)
@@ -231,7 +231,7 @@ func TestConnectionPooling(t *testing.T) {
 		}
 
 		// Wait for all goroutines to complete
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			<-done
 		}
 	})

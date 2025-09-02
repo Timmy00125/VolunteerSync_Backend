@@ -602,7 +602,7 @@ func TestAuthService_Login(t *testing.T) {
 		}
 
 		// Attempt login 5 times with wrong password
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			_, err := authService.Login(ctx, req)
 			if err == nil {
 				t.Errorf("Login attempt %d should fail with wrong password", i+1)

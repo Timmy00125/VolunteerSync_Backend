@@ -717,7 +717,7 @@ func BenchmarkJWTService_GenerateTokenPair(b *testing.B) {
 	service := createTestJWTService(&testing.T{})
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := service.GenerateTokenPair("user-id", "test@example.com", []string{"user"})
 		if err != nil {
 			b.Fatalf("GenerateTokenPair failed: %v", err)
@@ -733,7 +733,7 @@ func BenchmarkJWTService_ValidateAccessToken(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := service.ValidateAccessToken(tokenPair.AccessToken)
 		if err != nil {
 			b.Fatalf("ValidateAccessToken failed: %v", err)
