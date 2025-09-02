@@ -69,3 +69,15 @@ This file defines the Copilot agents for the VolunteerSync backend project.
   - **Thin Resolvers**: Resolvers should be lightweight. They translate the GraphQL request and call the appropriate core service to handle the business logic.
   - **Dataloaders**: Use dataloaders to prevent N+1 query problems, especially for nested data (e.g., fetching the organizer for a list of events).
 - **Instructions**: When modifying the GraphQL layer, always start with the schema. Ensure resolvers handle errors gracefully and delegate complex logic to the `internal/core` services.
+
+---
+
+## @registration-agent
+- **Scope**: `internal/core/registration/`
+- **Purpose**: Manages event registration, waitlisting, and attendance tracking.
+- **Key Concepts**:
+  - **Event Registration**: Handles volunteer registration, validating against event requirements and capacity.
+  - **Waitlist Management**: Manages a waitlist for full events, including automatic promotion.
+  - **Approval Workflow**: Facilitates organizer approval for registrations when required.
+  - **Attendance Tracking**: Manages volunteer check-in and attendance status (e.g., attended, no-show).
+- **Instructions**: Ensure transactional integrity for all registration-related database operations. Use a state machine for registration and attendance statuses. Consider asynchronous operations for notifications and waitlist promotions. Refer to `phase-5-registration-system.md` for detailed requirements.
