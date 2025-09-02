@@ -344,7 +344,12 @@ func (r *mutationResolver) RegisterForEvent(ctx context.Context, input model.Reg
 		return nil, fmt.Errorf("unauthorized")
 	}
 
-	registration, err := r.RegistrationService.RegisterForEvent(ctx, userID, input.EventId, *input.PersonalMessage)
+	personalMessage := ""
+	if input.PersonalMessage != nil {
+		personalMessage = *input.PersonalMessage
+	}
+
+	registration, err := r.RegistrationService.RegisterForEvent(ctx, userID, input.EventID, personalMessage)
 	if err != nil {
 		return nil, err
 	}
@@ -384,7 +389,12 @@ func (r *mutationResolver) ApproveRegistration(ctx context.Context, input model.
 		return nil, fmt.Errorf("unauthorized")
 	}
 
-	registration, err := r.RegistrationService.ApproveRegistration(ctx, userID, input.RegistrationID, input.Approved, *input.Notes)
+	notes := ""
+	if input.Notes != nil {
+		notes = *input.Notes
+	}
+
+	registration, err := r.RegistrationService.ApproveRegistration(ctx, userID, input.RegistrationID, input.Approved, notes)
 	if err != nil {
 		return nil, err
 	}

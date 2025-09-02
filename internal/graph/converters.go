@@ -17,26 +17,43 @@ func toGraphRegistration(r *registration.Registration) *model.Registration {
 	user := &model.User{ID: r.UserID}
 	event := &model.Event{ID: r.EventID}
 
-	return &model.Registration{
+	modelReg := &model.Registration{
 		ID:                 r.ID,
 		User:               user,
 		Event:              event,
 		Status:             model.RegistrationStatus(r.Status),
 		PersonalMessage:    &r.PersonalMessage,
-		AppliedAt:          r.AppliedAt,
-		ConfirmedAt:        r.ConfirmedAt,
-		CancelledAt:        r.CancelledAt,
-		CheckedInAt:        r.CheckedInAt,
-		CompletedAt:        r.CompletedAt,
+		AppliedAt:          r.AppliedAt.Format("2006-01-02T15:04:05Z07:00"),
 		WaitlistPosition:   r.WaitlistPosition,
 		ApprovalNotes:      &r.ApprovalNotes,
 		CancellationReason: &r.CancellationReason,
 		AttendanceStatus:   model.AttendanceStatus(r.AttendanceStatus),
 		CanCancel:          r.Status == registration.StatusConfirmed, // Example logic
 		CanCheckIn:         r.Status == registration.StatusConfirmed, // Example logic
-		CreatedAt:          r.CreatedAt,
-		UpdatedAt:          r.UpdatedAt,
+		CreatedAt:          r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:          r.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		Skills:             []*model.UserSkill{},
+		Interests:          []*model.Interest{},
 	}
+
+	if r.ConfirmedAt != nil {
+		s := r.ConfirmedAt.Format("2006-01-02T15:04:05Z07:00")
+		modelReg.ConfirmedAt = &s
+	}
+	if r.CancelledAt != nil {
+		s := r.CancelledAt.Format("2006-01-02T15:04:05Z07:00")
+		modelReg.CancelledAt = &s
+	}
+	if r.CheckedInAt != nil {
+		s := r.CheckedInAt.Format("2006-01-02T15:04:05Z07:00")
+		modelReg.CheckedInAt = &s
+	}
+	if r.CompletedAt != nil {
+		s := r.CompletedAt.Format("2006-01-02T15:04:05Z07:00")
+		modelReg.CompletedAt = &s
+	}
+
+	return modelReg
 }
 
 // toDomainUpdateProfile converts GraphQL UpdateProfileInput to domain UpdateProfileInput

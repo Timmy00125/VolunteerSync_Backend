@@ -182,7 +182,7 @@ func (s *Service) RegisterForEvent(ctx context.Context, userID, eventID, persona
 		return nil, status.Errorf(codes.Internal, "failed to get registrations: %v", err)
 	}
 
-	if len(registrations) >= event.Capacity {
+	if len(registrations) >= event.Capacity.Maximum {
 		registration.Status = StatusWaitlisted
 		// 5. Add to waitlist
 		if _, err := s.waitlistService.AddToWaitlist(ctx, registration); err != nil {
