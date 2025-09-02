@@ -10,25 +10,132 @@ import (
 	"time"
 
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/volunteersync/backend/internal/core/auth"
 	"github.com/volunteersync/backend/internal/core/event"
-	"github.com/volunteersync/backend/internal/graph/generated"
 	"github.com/volunteersync/backend/internal/graph/model"
 	mw "github.com/volunteersync/backend/internal/middleware"
 )
 
+// Organizer is the resolver for the organizer field.
+func (r *eventResolver) Organizer(ctx context.Context, obj *model.Event) (*model.User, error) {
+	if r.UserService == nil {
+		return nil, fmt.Errorf("user service unavailable")
+	}
+
+	// Get current user context for authorization
+	requesterID := mw.GetUserIDFromContext(ctx)
+	claims := mw.GetUserClaimsFromContext(ctx)
+	requesterRoles := []string{}
+	if claims != nil {
+		requesterRoles = claims.Roles
+	}
+
+	profile, err := r.UserService.GetProfile(ctx, obj.OrganizerID, requesterID, requesterRoles)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch organizer: %w", err)
+	}
+
+	return toGraphUser(profile), nil
+}
+
+// Images is the resolver for the images field.
+func (r *eventResolver) Images(ctx context.Context, obj *model.Event) ([]*model.EventImage, error) {
+	// TODO: Implement image fetching when image management is implemented
+	return []*model.EventImage{}, nil
+}
+
+// Announcements is the resolver for the announcements field.
+func (r *eventResolver) Announcements(ctx context.Context, obj *model.Event) ([]*model.EventAnnouncement, error) {
+	// TODO: Implement announcement fetching when announcement management is implemented
+	return []*model.EventAnnouncement{}, nil
+}
+
+// CurrentRegistrations is the resolver for the currentRegistrations field.
+func (r *eventResolver) CurrentRegistrations(ctx context.Context, obj *model.Event) (int, error) {
+	if r.RegistrationService == nil {
+		return 0, fmt.Errorf("registration service unavailable")
+	}
+
+	registrations, err := r.RegistrationService.GetRegistrationsByEventID(ctx, obj.ID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get registrations: %w", err)
+	}
+
+	return len(registrations), nil
+}
+
 // Register is the resolver for the register field.
 func (r *mutationResolver) Register(ctx context.Context, input model.RegisterInput) (*model.AuthPayload, error) {
-	panic(fmt.Errorf("not implemented: Register - register"))
+	if r.AuthService == nil {
+		return nil, fmt.Errorf("auth service unavailable")
+	}
+
+	req := &auth.RegisterRequest{
+		Name:     input.Name,
+		Email:    input.Email,
+		Password: input.Password,
+	}
+
+	result, err := r.AuthService.Register(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert auth.User to user.UserProfile for toGraphUser
+	userProfile := authUserToUserProfile(result.User)
+
+	return &model.AuthPayload{
+		Token:        result.AccessToken,
+		RefreshToken: result.RefreshToken,
+		User:         toGraphUser(userProfile),
+	}, nil
 }
 
 // Login is the resolver for the login field.
 func (r *mutationResolver) Login(ctx context.Context, input model.LoginInput) (*model.AuthPayload, error) {
-	panic(fmt.Errorf("not implemented: Login - login"))
+	if r.AuthService == nil {
+		return nil, fmt.Errorf("auth service unavailable")
+	}
+
+	req := &auth.LoginRequest{
+		Email:    input.Email,
+		Password: input.Password,
+	}
+
+	result, err := r.AuthService.Login(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert auth.User to user.UserProfile for toGraphUser
+	userProfile := authUserToUserProfile(result.User)
+
+	return &model.AuthPayload{
+		Token:        result.AccessToken,
+		RefreshToken: result.RefreshToken,
+		User:         toGraphUser(userProfile),
+	}, nil
 }
 
 // RefreshToken is the resolver for the refreshToken field.
 func (r *mutationResolver) RefreshToken(ctx context.Context, input model.RefreshTokenInput) (*model.AuthPayload, error) {
-	panic(fmt.Errorf("not implemented: RefreshToken - refreshToken"))
+	if r.AuthService == nil {
+		return nil, fmt.Errorf("auth service unavailable")
+	}
+
+	result, err := r.AuthService.RefreshToken(ctx, input.RefreshToken)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert auth.User to user.UserProfile for toGraphUser
+	userProfile := authUserToUserProfile(result.User)
+
+	return &model.AuthPayload{
+		Token:        result.AccessToken,
+		RefreshToken: result.RefreshToken,
+		User:         toGraphUser(userProfile),
+	}, nil
 }
 
 // Logout is the resolver for the logout field.
@@ -427,6 +534,24 @@ func (r *mutationResolver) UpdateRegistration(ctx context.Context, registrationI
 	panic(fmt.Errorf("not implemented: UpdateRegistration - updateRegistration"))
 }
 
+// Interests is the resolver for the interests field.
+func (r *publicProfileResolver) Interests(ctx context.Context, obj *model.PublicProfile) ([]*model.Interest, error) {
+	// The interests are already populated in the PublicProfile object by the toGraphPublicProfile converter
+	return obj.Interests, nil
+}
+
+// Skills is the resolver for the skills field.
+func (r *publicProfileResolver) Skills(ctx context.Context, obj *model.PublicProfile) ([]*model.Skill, error) {
+	// The skills are already populated in the PublicProfile object by the toGraphPublicProfile converter
+	return obj.Skills, nil
+}
+
+// VolunteerStats is the resolver for the volunteerStats field.
+func (r *publicProfileResolver) VolunteerStats(ctx context.Context, obj *model.PublicProfile) (*model.VolunteerStats, error) {
+	// The volunteerStats are already populated in the PublicProfile object by the toGraphPublicProfile converter
+	return obj.VolunteerStats, nil
+}
+
 // Health is the resolver for the health field.
 func (r *queryResolver) Health(ctx context.Context) (*model.Health, error) {
 	return &model.Health{
@@ -797,11 +922,77 @@ func (r *queryResolver) RegistrationStats(ctx context.Context, eventID string) (
 	panic(fmt.Errorf("not implemented: RegistrationStats - registrationStats"))
 }
 
-// Mutation returns generated.MutationResolver implementation.
-func (r *Resolver) Mutation() generated.MutationResolver { return &mutationResolver{r} }
+// User is the resolver for the user field.
+func (r *registrationResolver) User(ctx context.Context, obj *model.Registration) (*model.User, error) {
+	if r.UserService == nil {
+		return nil, fmt.Errorf("user service unavailable")
+	}
 
-// Query returns generated.QueryResolver implementation.
-func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
+	// Get current user context for authorization
+	requesterID := mw.GetUserIDFromContext(ctx)
+	claims := mw.GetUserClaimsFromContext(ctx)
+	requesterRoles := []string{}
+	if claims != nil {
+		requesterRoles = claims.Roles
+	}
 
+	profile, err := r.UserService.GetProfile(ctx, obj.User.ID, requesterID, requesterRoles)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch user: %w", err)
+	}
+
+	return toGraphUser(profile), nil
+}
+
+// Event is the resolver for the event field.
+func (r *registrationResolver) Event(ctx context.Context, obj *model.Registration) (*model.Event, error) {
+	if r.EventService == nil {
+		return nil, fmt.Errorf("event service unavailable")
+	}
+
+	domainEvent, err := r.EventService.GetEventByID(ctx, obj.Event.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch event: %w", err)
+	}
+
+	return toGraphQLEvent(domainEvent), nil
+}
+
+// Skills is the resolver for the skills field.
+func (r *registrationResolver) Skills(ctx context.Context, obj *model.Registration) ([]*model.UserSkill, error) {
+	// For now, return empty slice - this would be populated from registration-specific skills
+	// if the system supports skills per registration rather than per user
+	return []*model.UserSkill{}, nil
+}
+
+// Interests is the resolver for the interests field.
+func (r *registrationResolver) Interests(ctx context.Context, obj *model.Registration) ([]*model.Interest, error) {
+	// For now, return empty slice - this would be populated from registration-specific interests
+	// if the system supports interests per registration rather than per user
+	return []*model.Interest{}, nil
+}
+
+// Interests is the resolver for the interests field.
+func (r *userResolver) Interests(ctx context.Context, obj *model.User) ([]*model.Interest, error) {
+	// The interests are already populated in the User object by the toGraphUser converter
+	return obj.Interests, nil
+}
+
+// Skills is the resolver for the skills field.
+func (r *userResolver) Skills(ctx context.Context, obj *model.User) ([]*model.Skill, error) {
+	// The skills are already populated in the User object by the toGraphUser converter
+	return obj.Skills, nil
+}
+
+// PublicProfile is the resolver for the publicProfile field.
+func (r *userResolver) PublicProfile(ctx context.Context, obj *model.User) (*model.PublicProfile, error) {
+	// The publicProfile is already populated in the User object by the toGraphUser converter
+	return obj.PublicProfile, nil
+}
+
+type eventResolver struct{ *Resolver }
 type mutationResolver struct{ *Resolver }
+type publicProfileResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
+type registrationResolver struct{ *Resolver }
+type userResolver struct{ *Resolver }

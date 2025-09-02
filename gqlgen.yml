@@ -18,3 +18,50 @@ models:
   Upload:
     model:
       - github.com/99designs/gqlgen/graphql.Upload
+  
+  # Force resolvers for relationship fields to prevent N+1 queries
+  User:
+    fields:
+      events:
+        resolver: true
+      registrations:
+        resolver: true
+      interests:
+        resolver: true
+      skills:
+        resolver: true
+      publicProfile:
+        resolver: true
+  
+  Event:
+    fields:
+      organizer:
+        resolver: true
+      registrations:
+        resolver: true
+      currentRegistrations:
+        resolver: true
+      images:
+        resolver: true
+      announcements:
+        resolver: true
+  
+  Registration:
+    fields:
+      user:
+        resolver: true
+      event:
+        resolver: true
+      skills:
+        resolver: true
+      interests:
+        resolver: true
+  
+  PublicProfile:
+    fields:
+      interests:
+        resolver: true
+      skills:
+        resolver: true
+      volunteerStats:
+        resolver: true

@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"github.com/volunteersync/backend/internal/core/auth"
 	"github.com/volunteersync/backend/internal/core/event"
 	"github.com/volunteersync/backend/internal/core/registration"
 	usercore "github.com/volunteersync/backend/internal/core/user"
@@ -12,15 +13,12 @@ func toGraphRegistration(r *registration.Registration) *model.Registration {
 		return nil
 	}
 
-	// In a real implementation, we would use dataloaders to fetch the user and event
-	// to avoid N+1 queries.
-	user := &model.User{ID: r.UserID}
-	event := &model.Event{ID: r.EventID}
-
+	// Don't fetch user and event here - use field resolvers to avoid N+1 queries
+	// The User and Event fields will be resolved by their respective field resolvers
 	modelReg := &model.Registration{
 		ID:                 r.ID,
-		User:               user,
-		Event:              event,
+		User:               &model.User{ID: r.UserID},   // Only ID, resolver will fetch full data
+		Event:              &model.Event{ID: r.EventID}, // Only ID, resolver will fetch full data
 		Status:             model.RegistrationStatus(r.Status),
 		PersonalMessage:    &r.PersonalMessage,
 		AppliedAt:          r.AppliedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -32,8 +30,8 @@ func toGraphRegistration(r *registration.Registration) *model.Registration {
 		CanCheckIn:         r.Status == registration.StatusConfirmed, // Example logic
 		CreatedAt:          r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:          r.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		Skills:             []*model.UserSkill{},
-		Interests:          []*model.Interest{},
+		Skills:             []*model.UserSkill{}, // Will be resolved by field resolver if needed
+		Interests:          []*model.Interest{},  // Will be resolved by field resolver if needed
 	}
 
 	if r.ConfirmedAt != nil {
@@ -896,4 +894,32 @@ func convertDomainDaysOfWeek(days []event.DayOfWeek) []model.DayOfWeek {
 		}
 	}
 	return result
+}
+
+// authUserToUserProfile converts auth.User to user.UserProfile for GraphQL conversion
+func authUserToUserProfile(u *auth.User) *usercore.UserProfile {
+	if u == nil {
+		return nil
+	}
+
+	// Create a basic UserProfile from auth.User
+	// Note: Some fields will be empty/default and would need to be populated
+	// by fetching additional data from UserService if needed
+	return &usercore.UserProfile{
+		ID:                u.ID,
+		Email:             u.Email,
+		Name:              u.Name,
+		IsVerified:        u.EmailVerified,
+		CreatedAt:         u.CreatedAt,
+		UpdatedAt:         u.UpdatedAt,
+		Roles:             []string{},                         // Would need to be fetched from UserService
+		Location:          nil,                                // Would need to be fetched from UserService
+		Bio:               nil,                                // Would need to be fetched from UserService
+		Interests:         []usercore.Interest{},              // Would need to be fetched from UserService
+		Skills:            []usercore.Skill{},                 // Would need to be fetched from UserService
+		Privacy:           usercore.PrivacySettings{},         // Would need to be fetched from UserService
+		Notifications:     usercore.NotificationPreferences{}, // Would need to be fetched from UserService
+		ProfilePictureURL: nil,                                // Would need to be fetched from UserService
+		LastActiveAt:      u.LastLogin,                        // Use last login as last active
+	}
 }
