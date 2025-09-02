@@ -337,6 +337,86 @@ func (r *mutationResolver) DeleteEventAnnouncement(ctx context.Context, id strin
 	panic(fmt.Errorf("not implemented: DeleteEventAnnouncement - deleteEventAnnouncement"))
 }
 
+// RegisterForEvent is the resolver for the registerForEvent field.
+func (r *mutationResolver) RegisterForEvent(ctx context.Context, input model.RegisterForEventInput) (*model.Registration, error) {
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	registration, err := r.RegistrationService.RegisterForEvent(ctx, userID, input.EventId, *input.PersonalMessage)
+	if err != nil {
+		return nil, err
+	}
+
+	return toGraphRegistration(registration), nil
+}
+
+// BulkRegister is the resolver for the bulkRegister field.
+func (r *mutationResolver) BulkRegister(ctx context.Context, input model.BulkRegistrationInput) ([]*model.Registration, error) {
+	panic(fmt.Errorf("not implemented: BulkRegister - bulkRegister"))
+}
+
+// CancelRegistration is the resolver for the cancelRegistration field.
+func (r *mutationResolver) CancelRegistration(ctx context.Context, registrationID string, reason *string) (*model.Registration, error) {
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	var reasonStr string
+	if reason != nil {
+		reasonStr = *reason
+	}
+
+	registration, err := r.RegistrationService.CancelRegistration(ctx, userID, registrationID, reasonStr)
+	if err != nil {
+		return nil, err
+	}
+
+	return toGraphRegistration(registration), nil
+}
+
+// ApproveRegistration is the resolver for the approveRegistration field.
+func (r *mutationResolver) ApproveRegistration(ctx context.Context, input model.ApprovalDecisionInput) (*model.Registration, error) {
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	registration, err := r.RegistrationService.ApproveRegistration(ctx, userID, input.RegistrationID, input.Approved, *input.Notes)
+	if err != nil {
+		return nil, err
+	}
+
+	return toGraphRegistration(registration), nil
+}
+
+// CheckInVolunteer is the resolver for the checkInVolunteer field.
+func (r *mutationResolver) CheckInVolunteer(ctx context.Context, input model.AttendanceInput) (*model.AttendanceRecord, error) {
+	panic(fmt.Errorf("not implemented: CheckInVolunteer - checkInVolunteer"))
+}
+
+// MarkAttendance is the resolver for the markAttendance field.
+func (r *mutationResolver) MarkAttendance(ctx context.Context, input model.AttendanceInput) (*model.AttendanceRecord, error) {
+	panic(fmt.Errorf("not implemented: MarkAttendance - markAttendance"))
+}
+
+// PromoteFromWaitlist is the resolver for the promoteFromWaitlist field.
+func (r *mutationResolver) PromoteFromWaitlist(ctx context.Context, registrationID string) (*model.Registration, error) {
+	panic(fmt.Errorf("not implemented: PromoteFromWaitlist - promoteFromWaitlist"))
+}
+
+// TransferRegistration is the resolver for the transferRegistration field.
+func (r *mutationResolver) TransferRegistration(ctx context.Context, registrationID string, newEventID string) (*model.Registration, error) {
+	panic(fmt.Errorf("not implemented: TransferRegistration - transferRegistration"))
+}
+
+// UpdateRegistration is the resolver for the updateRegistration field.
+func (r *mutationResolver) UpdateRegistration(ctx context.Context, registrationID string, personalMessage *string) (*model.Registration, error) {
+	panic(fmt.Errorf("not implemented: UpdateRegistration - updateRegistration"))
+}
+
 // Health is the resolver for the health field.
 func (r *queryResolver) Health(ctx context.Context) (*model.Health, error) {
 	return &model.Health{
@@ -641,6 +721,70 @@ func (r *queryResolver) NearbyEvents(ctx context.Context, coordinates model.Coor
 // EventUpdates is the resolver for the eventUpdates field.
 func (r *queryResolver) EventUpdates(ctx context.Context, eventID string, first *int, after *string) ([]*model.EventUpdate, error) {
 	panic(fmt.Errorf("not implemented: EventUpdates - eventUpdates"))
+}
+
+// MyRegistrations is the resolver for the myRegistrations field.
+func (r *queryResolver) MyRegistrations(ctx context.Context, filter *model.RegistrationFilterInput) ([]*model.Registration, error) {
+	userID := mw.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	registrations, err := r.RegistrationService.GetRegistrationsByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*model.Registration
+	for _, reg := range registrations {
+		result = append(result, toGraphRegistration(reg))
+	}
+
+	return result, nil
+}
+
+// Registration is the resolver for the registration field.
+func (r *queryResolver) Registration(ctx context.Context, id string) (*model.Registration, error) {
+	registration, err := r.RegistrationService.GetRegistrationByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return toGraphRegistration(registration), nil
+}
+
+// EventRegistrations is the resolver for the eventRegistrations field.
+func (r *queryResolver) EventRegistrations(ctx context.Context, eventID string, filter *model.RegistrationFilterInput) ([]*model.Registration, error) {
+	registrations, err := r.RegistrationService.GetRegistrationsByEventID(ctx, eventID)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*model.Registration
+	for _, reg := range registrations {
+		result = append(result, toGraphRegistration(reg))
+	}
+
+	return result, nil
+}
+
+// WaitlistEntries is the resolver for the waitlistEntries field.
+func (r *queryResolver) WaitlistEntries(ctx context.Context, eventID string) ([]*model.WaitlistEntry, error) {
+	panic(fmt.Errorf("not implemented: WaitlistEntries - waitlistEntries"))
+}
+
+// RegistrationConflicts is the resolver for the registrationConflicts field.
+func (r *queryResolver) RegistrationConflicts(ctx context.Context, eventID string) ([]*model.RegistrationConflict, error) {
+	panic(fmt.Errorf("not implemented: RegistrationConflicts - registrationConflicts"))
+}
+
+// AttendanceRecords is the resolver for the attendanceRecords field.
+func (r *queryResolver) AttendanceRecords(ctx context.Context, eventID string) ([]*model.AttendanceRecord, error) {
+	panic(fmt.Errorf("not implemented: AttendanceRecords - attendanceRecords"))
+}
+
+// RegistrationStats is the resolver for the registrationStats field.
+func (r *queryResolver) RegistrationStats(ctx context.Context, eventID string) (*model.RegistrationStats, error) {
+	panic(fmt.Errorf("not implemented: RegistrationStats - registrationStats"))
 }
 
 // Mutation returns generated.MutationResolver implementation.

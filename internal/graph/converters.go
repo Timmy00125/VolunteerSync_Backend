@@ -2,9 +2,42 @@ package graph
 
 import (
 	"github.com/volunteersync/backend/internal/core/event"
+	"github.com/volunteersync/backend/internal/core/registration"
 	usercore "github.com/volunteersync/backend/internal/core/user"
 	"github.com/volunteersync/backend/internal/graph/model"
 )
+
+func toGraphRegistration(r *registration.Registration) *model.Registration {
+	if r == nil {
+		return nil
+	}
+
+	// In a real implementation, we would use dataloaders to fetch the user and event
+	// to avoid N+1 queries.
+	user := &model.User{ID: r.UserID}
+	event := &model.Event{ID: r.EventID}
+
+	return &model.Registration{
+		ID:                 r.ID,
+		User:               user,
+		Event:              event,
+		Status:             model.RegistrationStatus(r.Status),
+		PersonalMessage:    &r.PersonalMessage,
+		AppliedAt:          r.AppliedAt,
+		ConfirmedAt:        r.ConfirmedAt,
+		CancelledAt:        r.CancelledAt,
+		CheckedInAt:        r.CheckedInAt,
+		CompletedAt:        r.CompletedAt,
+		WaitlistPosition:   r.WaitlistPosition,
+		ApprovalNotes:      &r.ApprovalNotes,
+		CancellationReason: &r.CancellationReason,
+		AttendanceStatus:   model.AttendanceStatus(r.AttendanceStatus),
+		CanCancel:          r.Status == registration.StatusConfirmed, // Example logic
+		CanCheckIn:         r.Status == registration.StatusConfirmed, // Example logic
+		CreatedAt:          r.CreatedAt,
+		UpdatedAt:          r.UpdatedAt,
+	}
+}
 
 // toDomainUpdateProfile converts GraphQL UpdateProfileInput to domain UpdateProfileInput
 func toDomainUpdateProfile(input model.UpdateProfileInput) usercore.UpdateProfileInput {

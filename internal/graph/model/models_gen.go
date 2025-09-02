@@ -18,10 +18,37 @@ type ActivityLog struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+type ApprovalDecisionInput struct {
+	RegistrationID string   `json:"registrationId"`
+	Approved       bool     `json:"approved"`
+	Notes          *string  `json:"notes,omitempty"`
+	Conditions     []string `json:"conditions,omitempty"`
+}
+
+type AttendanceInput struct {
+	RegistrationID string           `json:"registrationId"`
+	Status         AttendanceStatus `json:"status"`
+	Notes          *string          `json:"notes,omitempty"`
+	CheckedInAt    *string          `json:"checkedInAt,omitempty"`
+}
+
+type AttendanceRecord struct {
+	Registration *Registration `json:"registration"`
+	CheckedInAt  *string       `json:"checkedInAt,omitempty"`
+	CheckedInBy  *User         `json:"checkedInBy,omitempty"`
+	Notes        *string       `json:"notes,omitempty"`
+}
+
 type AuthPayload struct {
 	Token        string `json:"token"`
 	RefreshToken string `json:"refreshToken"`
 	User         *User  `json:"user"`
+}
+
+type BulkRegistrationInput struct {
+	EventIds        []string `json:"eventIds"`
+	PersonalMessage *string  `json:"personalMessage,omitempty"`
+	SkipConflicts   *bool    `json:"skipConflicts,omitempty"`
 }
 
 type Coordinates struct {
@@ -48,6 +75,16 @@ type CreateEventInput struct {
 	TimeCommitment       TimeCommitmentType         `json:"timeCommitment"`
 	RecurrenceRule       *RecurrenceRuleInput       `json:"recurrenceRule,omitempty"`
 	RegistrationSettings *RegistrationSettingsInput `json:"registrationSettings"`
+}
+
+type DateRangeInput struct {
+	Start string `json:"start"`
+	End   string `json:"end"`
+}
+
+type EmergencyContactInput struct {
+	Name  string `json:"name"`
+	Phone string `json:"phone"`
 }
 
 type Event struct {
@@ -314,10 +351,56 @@ type RefreshTokenInput struct {
 	RefreshToken string `json:"refreshToken"`
 }
 
+type RegisterForEventInput struct {
+	EventID             string                 `json:"eventId"`
+	PersonalMessage     *string                `json:"personalMessage,omitempty"`
+	EmergencyContact    *EmergencyContactInput `json:"emergencyContact,omitempty"`
+	DietaryRestrictions *string                `json:"dietaryRestrictions,omitempty"`
+	AccessibilityNeeds  *string                `json:"accessibilityNeeds,omitempty"`
+}
+
 type RegisterInput struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+type Registration struct {
+	ID                 string             `json:"id"`
+	User               *User              `json:"user"`
+	Event              *Event             `json:"event"`
+	Status             RegistrationStatus `json:"status"`
+	PersonalMessage    *string            `json:"personalMessage,omitempty"`
+	Skills             []*UserSkill       `json:"skills"`
+	Interests          []*Interest        `json:"interests"`
+	AppliedAt          string             `json:"appliedAt"`
+	ConfirmedAt        *string            `json:"confirmedAt,omitempty"`
+	CancelledAt        *string            `json:"cancelledAt,omitempty"`
+	CheckedInAt        *string            `json:"checkedInAt,omitempty"`
+	CompletedAt        *string            `json:"completedAt,omitempty"`
+	WaitlistPosition   *int               `json:"waitlistPosition,omitempty"`
+	ApprovalNotes      *string            `json:"approvalNotes,omitempty"`
+	CancellationReason *string            `json:"cancellationReason,omitempty"`
+	AttendanceStatus   AttendanceStatus   `json:"attendanceStatus"`
+	CanCancel          bool               `json:"canCancel"`
+	CanCheckIn         bool               `json:"canCheckIn"`
+	CreatedAt          string             `json:"createdAt"`
+	UpdatedAt          string             `json:"updatedAt"`
+}
+
+type RegistrationConflict struct {
+	ConflictingEvent *Event           `json:"conflictingEvent"`
+	ConflictType     ConflictType     `json:"conflictType"`
+	Severity         ConflictSeverity `json:"severity"`
+	Suggestions      []*Event         `json:"suggestions"`
+}
+
+type RegistrationFilterInput struct {
+	EventID          *string              `json:"eventId,omitempty"`
+	UserID           *string              `json:"userId,omitempty"`
+	Status           []RegistrationStatus `json:"status,omitempty"`
+	DateRange        *DateRangeInput      `json:"dateRange,omitempty"`
+	AttendanceStatus []AttendanceStatus   `json:"attendanceStatus,omitempty"`
 }
 
 type RegistrationSettings struct {
@@ -336,6 +419,15 @@ type RegistrationSettingsInput struct {
 	AllowWaitlist        bool       `json:"allowWaitlist"`
 	ConfirmationRequired bool       `json:"confirmationRequired"`
 	CancellationDeadline *time.Time `json:"cancellationDeadline,omitempty"`
+}
+
+type RegistrationStats struct {
+	TotalRegistrations     int     `json:"totalRegistrations"`
+	ConfirmedRegistrations int     `json:"confirmedRegistrations"`
+	WaitlistCount          int     `json:"waitlistCount"`
+	AttendanceRate         float64 `json:"attendanceRate"`
+	NoShowRate             float64 `json:"noShowRate"`
+	CancellationRate       float64 `json:"cancellationRate"`
 }
 
 type Skill struct {
@@ -423,9 +515,86 @@ type UserSearchFilter struct {
 	Experience   *ExperienceLevel    `json:"experience,omitempty"`
 }
 
+type UserSkill struct {
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Proficiency SkillProficiency `json:"proficiency"`
+}
+
 type VolunteerStats struct {
 	Hours              int `json:"hours"`
 	EventsParticipated int `json:"eventsParticipated"`
+}
+
+type WaitlistEntry struct {
+	ID                     string        `json:"id"`
+	Registration           *Registration `json:"registration"`
+	Position               int           `json:"position"`
+	EstimatedPromotionTime *string       `json:"estimatedPromotionTime,omitempty"`
+	PromotionOfferedAt     *string       `json:"promotionOfferedAt,omitempty"`
+	PromotionExpiresAt     *string       `json:"promotionExpiresAt,omitempty"`
+	AutoPromote            bool          `json:"autoPromote"`
+}
+
+type AttendanceStatus string
+
+const (
+	AttendanceStatusRegistered AttendanceStatus = "REGISTERED"
+	AttendanceStatusCheckedIn  AttendanceStatus = "CHECKED_IN"
+	AttendanceStatusCompleted  AttendanceStatus = "COMPLETED"
+	AttendanceStatusNoShow     AttendanceStatus = "NO_SHOW"
+	AttendanceStatusCancelled  AttendanceStatus = "CANCELLED"
+)
+
+var AllAttendanceStatus = []AttendanceStatus{
+	AttendanceStatusRegistered,
+	AttendanceStatusCheckedIn,
+	AttendanceStatusCompleted,
+	AttendanceStatusNoShow,
+	AttendanceStatusCancelled,
+}
+
+func (e AttendanceStatus) IsValid() bool {
+	switch e {
+	case AttendanceStatusRegistered, AttendanceStatusCheckedIn, AttendanceStatusCompleted, AttendanceStatusNoShow, AttendanceStatusCancelled:
+		return true
+	}
+	return false
+}
+
+func (e AttendanceStatus) String() string {
+	return string(e)
+}
+
+func (e *AttendanceStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = AttendanceStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid AttendanceStatus", str)
+	}
+	return nil
+}
+
+func (e AttendanceStatus) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *AttendanceStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e AttendanceStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }
 
 type AvailabilityStatus string
@@ -480,6 +649,124 @@ func (e *AvailabilityStatus) UnmarshalJSON(b []byte) error {
 }
 
 func (e AvailabilityStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type ConflictSeverity string
+
+const (
+	ConflictSeverityLow      ConflictSeverity = "LOW"
+	ConflictSeverityMedium   ConflictSeverity = "MEDIUM"
+	ConflictSeverityHigh     ConflictSeverity = "HIGH"
+	ConflictSeverityCritical ConflictSeverity = "CRITICAL"
+)
+
+var AllConflictSeverity = []ConflictSeverity{
+	ConflictSeverityLow,
+	ConflictSeverityMedium,
+	ConflictSeverityHigh,
+	ConflictSeverityCritical,
+}
+
+func (e ConflictSeverity) IsValid() bool {
+	switch e {
+	case ConflictSeverityLow, ConflictSeverityMedium, ConflictSeverityHigh, ConflictSeverityCritical:
+		return true
+	}
+	return false
+}
+
+func (e ConflictSeverity) String() string {
+	return string(e)
+}
+
+func (e *ConflictSeverity) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ConflictSeverity(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ConflictSeverity", str)
+	}
+	return nil
+}
+
+func (e ConflictSeverity) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ConflictSeverity) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ConflictSeverity) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type ConflictType string
+
+const (
+	ConflictTypeTimeOverlap         ConflictType = "TIME_OVERLAP"
+	ConflictTypeLocationConflict    ConflictType = "LOCATION_CONFLICT"
+	ConflictTypeTravelTimeConflict  ConflictType = "TRAVEL_TIME_CONFLICT"
+	ConflictTypeSkillOvercommitment ConflictType = "SKILL_OVERCOMMITMENT"
+)
+
+var AllConflictType = []ConflictType{
+	ConflictTypeTimeOverlap,
+	ConflictTypeLocationConflict,
+	ConflictTypeTravelTimeConflict,
+	ConflictTypeSkillOvercommitment,
+}
+
+func (e ConflictType) IsValid() bool {
+	switch e {
+	case ConflictTypeTimeOverlap, ConflictTypeLocationConflict, ConflictTypeTravelTimeConflict, ConflictTypeSkillOvercommitment:
+		return true
+	}
+	return false
+}
+
+func (e ConflictType) String() string {
+	return string(e)
+}
+
+func (e *ConflictType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ConflictType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ConflictType", str)
+	}
+	return nil
+}
+
+func (e ConflictType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ConflictType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ConflictType) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
@@ -990,6 +1277,71 @@ func (e *RecurrenceFrequency) UnmarshalJSON(b []byte) error {
 }
 
 func (e RecurrenceFrequency) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type RegistrationStatus string
+
+const (
+	RegistrationStatusPendingApproval RegistrationStatus = "PENDING_APPROVAL"
+	RegistrationStatusConfirmed       RegistrationStatus = "CONFIRMED"
+	RegistrationStatusWaitlisted      RegistrationStatus = "WAITLISTED"
+	RegistrationStatusCancelled       RegistrationStatus = "CANCELLED"
+	RegistrationStatusDeclined        RegistrationStatus = "DECLINED"
+	RegistrationStatusNoShow          RegistrationStatus = "NO_SHOW"
+	RegistrationStatusCompleted       RegistrationStatus = "COMPLETED"
+)
+
+var AllRegistrationStatus = []RegistrationStatus{
+	RegistrationStatusPendingApproval,
+	RegistrationStatusConfirmed,
+	RegistrationStatusWaitlisted,
+	RegistrationStatusCancelled,
+	RegistrationStatusDeclined,
+	RegistrationStatusNoShow,
+	RegistrationStatusCompleted,
+}
+
+func (e RegistrationStatus) IsValid() bool {
+	switch e {
+	case RegistrationStatusPendingApproval, RegistrationStatusConfirmed, RegistrationStatusWaitlisted, RegistrationStatusCancelled, RegistrationStatusDeclined, RegistrationStatusNoShow, RegistrationStatusCompleted:
+		return true
+	}
+	return false
+}
+
+func (e RegistrationStatus) String() string {
+	return string(e)
+}
+
+func (e *RegistrationStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RegistrationStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RegistrationStatus", str)
+	}
+	return nil
+}
+
+func (e RegistrationStatus) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RegistrationStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RegistrationStatus) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

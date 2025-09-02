@@ -632,6 +632,166 @@ type Mutation {
     isUrgent: Boolean
   ): EventAnnouncement!
   deleteEventAnnouncement(id: ID!): Boolean!
+
+  # Registration mutations
+  registerForEvent(input: RegisterForEventInput!): Registration!
+  bulkRegister(input: BulkRegistrationInput!): [Registration!]!
+  cancelRegistration(registrationId: ID!, reason: String): Registration!
+  approveRegistration(input: ApprovalDecisionInput!): Registration!
+  checkInVolunteer(input: AttendanceInput!): AttendanceRecord!
+  markAttendance(input: AttendanceInput!): AttendanceRecord!
+  promoteFromWaitlist(registrationId: ID!): Registration!
+  transferRegistration(registrationId: ID!, newEventId: ID!): Registration!
+  updateRegistration(
+    registrationId: ID!
+    personalMessage: String
+  ): Registration!
+}
+
+# Registration Types
+type Registration {
+  id: ID!
+  user: User!
+  event: Event!
+  status: RegistrationStatus!
+  personalMessage: String
+  skills: [UserSkill!]!
+  interests: [Interest!]!
+  appliedAt: DateTime!
+  confirmedAt: DateTime
+  cancelledAt: DateTime
+  checkedInAt: DateTime
+  completedAt: DateTime
+  waitlistPosition: Int
+  approvalNotes: String
+  cancellationReason: String
+  attendanceStatus: AttendanceStatus!
+  canCancel: Boolean!
+  canCheckIn: Boolean!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type WaitlistEntry {
+  id: ID!
+  registration: Registration!
+  position: Int!
+  estimatedPromotionTime: DateTime
+  promotionOfferedAt: DateTime
+  promotionExpiresAt: DateTime
+  autoPromote: Boolean!
+}
+
+type RegistrationConflict {
+  conflictingEvent: Event!
+  conflictType: ConflictType!
+  severity: ConflictSeverity!
+  suggestions: [Event!]!
+}
+
+type AttendanceRecord {
+  registration: Registration!
+  checkedInAt: DateTime
+  checkedInBy: User
+  notes: String
+}
+
+# Input Types
+input RegisterForEventInput {
+  eventId: ID!
+  personalMessage: String
+  emergencyContact: EmergencyContactInput
+  dietaryRestrictions: String
+  accessibilityNeeds: String
+}
+
+input BulkRegistrationInput {
+  eventIds: [ID!]!
+  personalMessage: String
+  skipConflicts: Boolean
+}
+
+input ApprovalDecisionInput {
+  registrationId: ID!
+  approved: Boolean!
+  notes: String
+  conditions: [String!]
+}
+
+input AttendanceInput {
+  registrationId: ID!
+  status: AttendanceStatus!
+  notes: String
+  checkedInAt: DateTime
+}
+
+input RegistrationFilterInput {
+  eventId: ID
+  userId: ID
+  status: [RegistrationStatus!]
+  dateRange: DateRangeInput
+  attendanceStatus: [AttendanceStatus!]
+}
+
+# Enums
+enum RegistrationStatus {
+  PENDING_APPROVAL
+  CONFIRMED
+  WAITLISTED
+  CANCELLED
+  DECLINED
+  NO_SHOW
+  COMPLETED
+}
+
+enum AttendanceStatus {
+  REGISTERED
+  CHECKED_IN
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+}
+
+enum ConflictType {
+  TIME_OVERLAP
+  LOCATION_CONFLICT
+  TRAVEL_TIME_CONFLICT
+  SKILL_OVERCOMMITMENT
+}
+
+enum ConflictSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+type RegistrationStats {
+  totalRegistrations: Int!
+  confirmedRegistrations: Int!
+  waitlistCount: Int!
+  attendanceRate: Float!
+  noShowRate: Float!
+  cancellationRate: Float!
+}
+
+
+extend type Query {
+  myRegistrations(filter: RegistrationFilterInput): [Registration!]!
+  registration(id: ID!): Registration
+  eventRegistrations(
+    eventId: ID!
+    filter: RegistrationFilterInput
+  ): [Registration!]!
+  waitlistEntries(eventId: ID!): [WaitlistEntry!]!
+  registrationConflicts(eventId: ID!): [RegistrationConflict!]!
+  attendanceRecords(eventId: ID!): [AttendanceRecord!]!
+  registrationStats(eventId: ID!): RegistrationStats!
+}
+
+input EmergencyContactInput {
+    name: String!
+    phone: String!
 }
 
 # Additional types used by queries
@@ -641,4 +801,19 @@ type ActivityLog {
   ipAddress: String
   userAgent: String
   createdAt: Time!
+}
+
+scalar DateTime
+
+# A custom type for user skills to be used in the Registration type
+type UserSkill {
+  id: ID!
+  name: String!
+  proficiency: SkillProficiency!
+}
+
+# A custom input type for date ranges
+input DateRangeInput {
+  start: DateTime!
+  end: DateTime!
 }
