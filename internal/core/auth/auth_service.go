@@ -10,12 +10,19 @@ import (
 	"github.com/google/uuid"
 )
 
+// UserRoleService defines the interface for user role operations needed by auth service
+type UserRoleService interface {
+	SetUserRoles(ctx context.Context, userID string, roles []string, assignedBy string) error
+	GetUserRoles(ctx context.Context, userID string) ([]string, error)
+}
+
 // AuthService handles user authentication operations
 type AuthService struct {
 	userRepo         UserRepository
 	refreshTokenRepo RefreshTokenRepository
 	passwordService  *PasswordService
 	jwtService       *JWTService
+	userRoleService  UserRoleService
 	logger           *slog.Logger
 }
 
@@ -25,6 +32,7 @@ func NewAuthService(
 	refreshTokenRepo RefreshTokenRepository,
 	passwordService *PasswordService,
 	jwtService *JWTService,
+	userRoleService UserRoleService,
 	logger *slog.Logger,
 ) *AuthService {
 	return &AuthService{
@@ -32,6 +40,7 @@ func NewAuthService(
 		refreshTokenRepo: refreshTokenRepo,
 		passwordService:  passwordService,
 		jwtService:       jwtService,
+		userRoleService:  userRoleService,
 		logger:           logger,
 	}
 }
@@ -53,8 +62,33 @@ func (as *AuthService) Register(ctx context.Context, req *RegisterRequest) (*Aut
 		return nil, err
 	}
 
-	// Generate authentication response
-	return as.generateAuthResponse(ctx, user, []string{"user"})
+	// Assign role if provided
+	var userRoles []string
+	if req.Role != nil && *req.Role != "" {
+		userRoles = []string{*req.Role}
+
+		// Assign role using user role service
+		err = as.userRoleService.SetUserRoles(ctx, user.ID, userRoles, user.ID)
+		if err != nil {
+			as.logger.Error("failed to assign role during registration", "user_id", user.ID, "role", *req.Role, "error", err)
+			// Note: We don't return error here to avoid leaving user in inconsistent state
+			// The user is created but without the role - they can contact support
+			userRoles = []string{} // Clear roles for token generation
+		}
+	} else {
+		// Default to VOLUNTEER role if no role specified
+		defaultRole := RoleVolunteer
+		userRoles = []string{defaultRole}
+
+		err = as.userRoleService.SetUserRoles(ctx, user.ID, userRoles, user.ID)
+		if err != nil {
+			as.logger.Error("failed to assign default role during registration", "user_id", user.ID, "error", err)
+			userRoles = []string{} // Clear roles for token generation
+		}
+	}
+
+	// Generate authentication response with assigned roles
+	return as.generateAuthResponse(ctx, user, userRoles)
 }
 
 // Login authenticates a user with email and password
@@ -132,6 +166,14 @@ func (as *AuthService) validateRegisterRequest(req *RegisterRequest) error {
 	if req.Password == "" {
 		return fmt.Errorf("password is required")
 	}
+
+	// Validate role if provided
+	if req.Role != nil {
+		if err := ValidateRole(*req.Role); err != nil {
+			return fmt.Errorf("invalid role: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -307,9 +349,18 @@ func (as *AuthService) handleSuccessfulLogin(ctx context.Context, user *User) (*
 		as.logger.Error("failed to update last login", "user_id", user.ID, "error", err)
 	}
 
-	// Generate tokens with user roles
-	roles := []string{"user"}
-	// Add additional roles based on user properties if needed
+	// Get user roles from database
+	roles, err := as.userRoleService.GetUserRoles(ctx, user.ID)
+	if err != nil {
+		as.logger.Error("failed to get user roles", "user_id", user.ID, "error", err)
+		// Default to empty roles if we can't fetch them
+		roles = []string{}
+	}
+
+	// Ensure user has at least one role for token generation
+	if len(roles) == 0 {
+		roles = []string{RoleVolunteer} // Default fallback role
+	}
 
 	return as.generateAuthResponse(ctx, user, roles)
 }
@@ -362,8 +413,21 @@ func (as *AuthService) refreshUserTokens(ctx context.Context, user *User, claims
 		as.logger.Error("failed to revoke old refresh token", "user_id", user.ID, "error", err)
 	}
 
+	// Get fresh user roles from database for new token
+	roles, err := as.userRoleService.GetUserRoles(ctx, user.ID)
+	if err != nil {
+		as.logger.Error("failed to get user roles for token refresh", "user_id", user.ID, "error", err)
+		// Fall back to roles from existing claims
+		roles = claims.Roles
+	}
+
+	// Ensure user has at least one role
+	if len(roles) == 0 {
+		roles = []string{RoleVolunteer} // Default fallback role
+	}
+
 	// Generate new tokens
-	tokenPair, err := as.jwtService.GenerateTokenPair(user.ID, user.Email, claims.Roles)
+	tokenPair, err := as.jwtService.GenerateTokenPair(user.ID, user.Email, roles)
 	if err != nil {
 		as.logger.Error("failed to generate new tokens", "user_id", user.ID, "error", err)
 		return nil, fmt.Errorf("failed to generate new tokens")

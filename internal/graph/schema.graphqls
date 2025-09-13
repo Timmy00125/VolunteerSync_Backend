@@ -433,6 +433,7 @@ input RegisterInput {
   name: String!
   email: String!
   password: String!
+  role: String
 }
 
 input LoginInput {
@@ -775,7 +776,6 @@ type RegistrationStats {
   cancellationRate: Float!
 }
 
-
 extend type Query {
   myRegistrations(filter: RegistrationFilterInput): [Registration!]!
   registration(id: ID!): Registration
@@ -790,8 +790,8 @@ extend type Query {
 }
 
 input EmergencyContactInput {
-    name: String!
-    phone: String!
+  name: String!
+  phone: String!
 }
 
 # Additional types used by queries

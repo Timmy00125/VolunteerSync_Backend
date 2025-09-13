@@ -139,6 +139,8 @@ func setupRoutes(r *gin.Engine, db *sql.DB, cfg *config.Config) {
 		// For demo, reuse user store for user repo via an adapter implemented on UserStorePG
 		userRepo := pg.NewAuthUserRepository(db)
 		refreshRepo := pg.NewRefreshTokenRepository(db)
+		// Use the same user store for role management
+		userStore := pg.NewUserStore(db)
 		pwd := authcore.NewPasswordService(12)
 		jwtSvc, err := authcore.NewJWTService(authcore.JWTConfig{
 			AccessSecret:  cfg.JWT.AccessSecret,
@@ -151,7 +153,7 @@ func setupRoutes(r *gin.Engine, db *sql.DB, cfg *config.Config) {
 			log.Fatalf("jwt service: %v", err)
 		}
 		logger := slog.Default()
-		authSvc = authcore.NewAuthService(userRepo, refreshRepo, pwd, jwtSvc, logger)
+		authSvc = authcore.NewAuthService(userRepo, refreshRepo, pwd, jwtSvc, userStore, logger)
 	}
 
 	// Wire event service

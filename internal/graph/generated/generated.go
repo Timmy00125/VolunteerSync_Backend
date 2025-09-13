@@ -3112,6 +3112,7 @@ input RegisterInput {
   name: String!
   email: String!
   password: String!
+  role: String
 }
 
 input LoginInput {
@@ -3454,7 +3455,6 @@ type RegistrationStats {
   cancellationRate: Float!
 }
 
-
 extend type Query {
   myRegistrations(filter: RegistrationFilterInput): [Registration!]!
   registration(id: ID!): Registration
@@ -3469,8 +3469,8 @@ extend type Query {
 }
 
 input EmergencyContactInput {
-    name: String!
-    phone: String!
+  name: String!
+  phone: String!
 }
 
 # Additional types used by queries
@@ -21082,7 +21082,7 @@ func (ec *executionContext) unmarshalInputRegisterInput(ctx context.Context, obj
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "email", "password"}
+	fieldsInOrder := [...]string{"name", "email", "password", "role"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -21110,6 +21110,13 @@ func (ec *executionContext) unmarshalInputRegisterInput(ctx context.Context, obj
 				return it, err
 			}
 			it.Password = data
+		case "role":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Role = data
 		}
 	}
 

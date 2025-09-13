@@ -74,6 +74,7 @@ func (r *mutationResolver) Register(ctx context.Context, input model.RegisterInp
 		Name:     input.Name,
 		Email:    input.Email,
 		Password: input.Password,
+		Role:     input.Role,
 	}
 
 	result, err := r.AuthService.Register(ctx, req)

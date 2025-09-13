@@ -235,11 +235,51 @@ func (m *MockRefreshTokenRepository) CountActiveTokensForUser(ctx context.Contex
 	return count, nil
 }
 
+// MockUserRoleService for testing role assignment
+type MockUserRoleService struct {
+	userRoles   map[string][]string
+	shouldError bool
+	errorMsg    string
+}
+
+func NewMockUserRoleService() *MockUserRoleService {
+	return &MockUserRoleService{
+		userRoles: make(map[string][]string),
+	}
+}
+
+func (m *MockUserRoleService) SetError(shouldError bool, msg string) {
+	m.shouldError = shouldError
+	m.errorMsg = msg
+}
+
+func (m *MockUserRoleService) SetUserRoles(ctx context.Context, userID string, roles []string, assignedBy string) error {
+	if m.shouldError {
+		return errors.New(m.errorMsg)
+	}
+
+	m.userRoles[userID] = roles
+	return nil
+}
+
+func (m *MockUserRoleService) GetUserRoles(ctx context.Context, userID string) ([]string, error) {
+	if m.shouldError {
+		return nil, errors.New(m.errorMsg)
+	}
+
+	roles, exists := m.userRoles[userID]
+	if !exists {
+		return []string{}, nil
+	}
+	return roles, nil
+}
+
 // Test helper functions
 
-func createTestAuthService(t *testing.T) (*AuthService, *MockUserRepository, *MockRefreshTokenRepository) {
+func createTestAuthService(t *testing.T) (*AuthService, *MockUserRepository, *MockRefreshTokenRepository, *MockUserRoleService) {
 	userRepo := NewMockUserRepository()
 	refreshTokenRepo := NewMockRefreshTokenRepository()
+	userRoleService := NewMockUserRoleService()
 	passwordService := NewPasswordService(12)
 
 	jwtConfig := JWTConfig{
@@ -257,14 +297,14 @@ func createTestAuthService(t *testing.T) (*AuthService, *MockUserRepository, *Mo
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	authService := NewAuthService(userRepo, refreshTokenRepo, passwordService, jwtService, logger)
-	return authService, userRepo, refreshTokenRepo
+	authService := NewAuthService(userRepo, refreshTokenRepo, passwordService, jwtService, userRoleService, logger)
+	return authService, userRepo, refreshTokenRepo, userRoleService
 }
 
 // AuthService Tests
 
 func TestAuthService_Register(t *testing.T) {
-	authService, userRepo, _ := createTestAuthService(t)
+	authService, userRepo, _, _ := createTestAuthService(t)
 	ctx := context.Background()
 
 	t.Run("successful user registration", func(t *testing.T) {
@@ -484,7 +524,7 @@ func TestAuthService_Register(t *testing.T) {
 }
 
 func TestAuthService_Login(t *testing.T) {
-	authService, userRepo, _ := createTestAuthService(t)
+	authService, userRepo, _, _ := createTestAuthService(t)
 	ctx := context.Background()
 
 	// Create a test user
@@ -734,7 +774,7 @@ func TestAuthService_Login(t *testing.T) {
 }
 
 func TestAuthService_RefreshToken(t *testing.T) {
-	authService, userRepo, refreshTokenRepo := createTestAuthService(t)
+	authService, userRepo, refreshTokenRepo, _ := createTestAuthService(t)
 	ctx := context.Background()
 
 	// Create a test user and generate tokens
@@ -875,7 +915,7 @@ func TestAuthService_RefreshToken(t *testing.T) {
 }
 
 func TestAuthService_Logout(t *testing.T) {
-	authService, _, refreshTokenRepo := createTestAuthService(t)
+	authService, _, refreshTokenRepo, _ := createTestAuthService(t)
 	ctx := context.Background()
 
 	// Create test user and tokens
@@ -921,7 +961,7 @@ func TestAuthService_Logout(t *testing.T) {
 }
 
 func TestAuthService_GetUserByID(t *testing.T) {
-	authService, userRepo, _ := createTestAuthService(t)
+	authService, userRepo, _, _ := createTestAuthService(t)
 	ctx := context.Background()
 
 	// Create test user
@@ -983,7 +1023,7 @@ func TestAuthService_GetUserByID(t *testing.T) {
 }
 
 func TestAuthService_ValidateAccessToken(t *testing.T) {
-	authService, _, _ := createTestAuthService(t)
+	authService, _, _, _ := createTestAuthService(t)
 	ctx := context.Background()
 
 	// Generate test tokens
@@ -1031,4 +1071,489 @@ func TestAuthService_ValidateAccessToken(t *testing.T) {
 			t.Error("ValidateAccessToken() with empty token should return error")
 		}
 	})
+}
+
+// Role-based Registration Tests
+
+func TestAuthService_RegisterWithRoles(t *testing.T) {
+	authService, userRepo, _, userRoleService := createTestAuthService(t)
+	ctx := context.Background()
+
+	t.Run("successful registration with VOLUNTEER role", func(t *testing.T) {
+		role := RoleVolunteer
+		req := &RegisterRequest{
+			Name:     "John Volunteer",
+			Email:    "john.volunteer@example.com",
+			Password: "SecurePassword123!",
+			Role:     &role,
+		}
+
+		response, err := authService.Register(ctx, req)
+		if err != nil {
+			t.Errorf("Register() with VOLUNTEER role error = %v, want nil", err)
+			return
+		}
+
+		if response == nil {
+			t.Error("Register() returned nil response")
+			return
+		}
+
+		// Verify user was created
+		if response.User == nil {
+			t.Error("Register() response missing user")
+			return
+		}
+
+		// Verify role was assigned
+		assignedRoles, err := userRoleService.GetUserRoles(ctx, response.User.ID)
+		if err != nil {
+			t.Errorf("Failed to get user roles: %v", err)
+			return
+		}
+
+		if len(assignedRoles) != 1 || assignedRoles[0] != RoleVolunteer {
+			t.Errorf("Expected user to have VOLUNTEER role, got: %v", assignedRoles)
+		}
+
+		// Verify tokens are valid
+		if response.AccessToken == "" {
+			t.Error("Register() response missing access token")
+		}
+		if response.RefreshToken == "" {
+			t.Error("Register() response missing refresh token")
+		}
+	})
+
+	t.Run("successful registration with ORGANIZER role", func(t *testing.T) {
+		role := RoleOrganizer
+		req := &RegisterRequest{
+			Name:     "Jane Organizer",
+			Email:    "jane.organizer@example.com",
+			Password: "SecurePassword123!",
+			Role:     &role,
+		}
+
+		response, err := authService.Register(ctx, req)
+		if err != nil {
+			t.Errorf("Register() with ORGANIZER role error = %v, want nil", err)
+			return
+		}
+
+		// Verify role was assigned
+		assignedRoles, err := userRoleService.GetUserRoles(ctx, response.User.ID)
+		if err != nil {
+			t.Errorf("Failed to get user roles: %v", err)
+			return
+		}
+
+		if len(assignedRoles) != 1 || assignedRoles[0] != RoleOrganizer {
+			t.Errorf("Expected user to have ORGANIZER role, got: %v", assignedRoles)
+		}
+	})
+
+	t.Run("registration with no role defaults to VOLUNTEER", func(t *testing.T) {
+		req := &RegisterRequest{
+			Name:     "Default User",
+			Email:    "default@example.com",
+			Password: "SecurePassword123!",
+			Role:     nil, // No role specified
+		}
+
+		response, err := authService.Register(ctx, req)
+		if err != nil {
+			t.Errorf("Register() with no role error = %v, want nil", err)
+			return
+		}
+
+		// Verify default role was assigned
+		assignedRoles, err := userRoleService.GetUserRoles(ctx, response.User.ID)
+		if err != nil {
+			t.Errorf("Failed to get user roles: %v", err)
+			return
+		}
+
+		if len(assignedRoles) != 1 || assignedRoles[0] != RoleVolunteer {
+			t.Errorf("Expected user to have default VOLUNTEER role, got: %v", assignedRoles)
+		}
+	})
+
+	t.Run("registration with empty role defaults to VOLUNTEER", func(t *testing.T) {
+		emptyRole := ""
+		req := &RegisterRequest{
+			Name:     "Empty Role User",
+			Email:    "empty@example.com",
+			Password: "SecurePassword123!",
+			Role:     &emptyRole,
+		}
+
+		response, err := authService.Register(ctx, req)
+		if err != nil {
+			t.Errorf("Register() with empty role error = %v, want nil", err)
+			return
+		}
+
+		// Verify default role was assigned
+		assignedRoles, err := userRoleService.GetUserRoles(ctx, response.User.ID)
+		if err != nil {
+			t.Errorf("Failed to get user roles: %v", err)
+			return
+		}
+
+		if len(assignedRoles) != 1 || assignedRoles[0] != RoleVolunteer {
+			t.Errorf("Expected user to have default VOLUNTEER role, got: %v", assignedRoles)
+		}
+	})
+
+	t.Run("registration with invalid role fails validation", func(t *testing.T) {
+		invalidRole := "ADMIN" // ADMIN is not allowed for self-registration
+		req := &RegisterRequest{
+			Name:     "Invalid Role User",
+			Email:    "invalid@example.com",
+			Password: "SecurePassword123!",
+			Role:     &invalidRole,
+		}
+
+		response, err := authService.Register(ctx, req)
+		if err == nil {
+			t.Error("Register() with ADMIN role should fail validation")
+			return
+		}
+
+		if response != nil {
+			t.Error("Register() with invalid role should return nil response")
+		}
+
+		// Verify error message mentions invalid role
+		if !strings.Contains(err.Error(), "invalid role") {
+			t.Errorf("Expected error to mention 'invalid role', got: %v", err)
+		}
+	})
+
+	t.Run("registration with unrecognized role fails validation", func(t *testing.T) {
+		invalidRole := "INVALID_ROLE"
+		req := &RegisterRequest{
+			Name:     "Invalid Role User",
+			Email:    "invalid2@example.com",
+			Password: "SecurePassword123!",
+			Role:     &invalidRole,
+		}
+
+		response, err := authService.Register(ctx, req)
+		if err == nil {
+			t.Error("Register() with unrecognized role should fail validation")
+			return
+		}
+
+		if response != nil {
+			t.Error("Register() with invalid role should return nil response")
+		}
+	})
+
+	t.Run("role assignment failure doesn't prevent user creation", func(t *testing.T) {
+		// Set user role service to return error
+		userRoleService.SetError(true, "role assignment service unavailable")
+
+		role := RoleVolunteer
+		req := &RegisterRequest{
+			Name:     "Role Error User",
+			Email:    "roleerror@example.com",
+			Password: "SecurePassword123!",
+			Role:     &role,
+		}
+
+		response, err := authService.Register(ctx, req)
+		if err != nil {
+			t.Errorf("Register() should succeed even if role assignment fails, got error: %v", err)
+			return
+		}
+
+		// User should still be created
+		if response == nil || response.User == nil {
+			t.Error("Register() should create user even if role assignment fails")
+			return
+		}
+
+		// Verify user exists in repository
+		user, err := userRepo.GetUserByID(ctx, response.User.ID)
+		if err != nil {
+			t.Errorf("User should exist in repository: %v", err)
+		}
+		if user.Email != req.Email {
+			t.Errorf("Expected user email %s, got %s", req.Email, user.Email)
+		}
+
+		// Reset error state
+		userRoleService.SetError(false, "")
+	})
+}
+
+func TestAuthService_LoginWithRoles(t *testing.T) {
+	authService, userRepo, _, userRoleService := createTestAuthService(t)
+	ctx := context.Background()
+
+	// Create a test user with ORGANIZER role
+	user := &User{
+		ID:                  "test-organizer-id",
+		Email:               "organizer@example.com",
+		Name:                "Test Organizer",
+		EmailVerified:       false,
+		FailedLoginAttempts: 0,
+		CreatedAt:           time.Now(),
+		UpdatedAt:           time.Now(),
+	}
+
+	passwordService := NewPasswordService(12)
+	hashedPassword, _ := passwordService.HashPassword("TestPassword123!")
+	user.PasswordHash = &hashedPassword
+
+	userRepo.CreateUser(ctx, user)
+	userRoleService.SetUserRoles(ctx, user.ID, []string{RoleOrganizer}, user.ID)
+
+	t.Run("login returns user roles in token", func(t *testing.T) {
+		req := &LoginRequest{
+			Email:    "organizer@example.com",
+			Password: "TestPassword123!",
+		}
+
+		response, err := authService.Login(ctx, req)
+		if err != nil {
+			t.Errorf("Login() error = %v, want nil", err)
+			return
+		}
+
+		if response == nil {
+			t.Error("Login() returned nil response")
+			return
+		}
+
+		// Validate the access token contains correct roles
+		claims, err := authService.ValidateAccessToken(response.AccessToken)
+		if err != nil {
+			t.Errorf("Failed to validate access token: %v", err)
+			return
+		}
+
+		if len(claims.Roles) != 1 || claims.Roles[0] != RoleOrganizer {
+			t.Errorf("Expected token to contain ORGANIZER role, got: %v", claims.Roles)
+		}
+	})
+
+	t.Run("login with role service error uses fallback", func(t *testing.T) {
+		// Set user role service to return error
+		userRoleService.SetError(true, "role service unavailable")
+
+		req := &LoginRequest{
+			Email:    "organizer@example.com",
+			Password: "TestPassword123!",
+		}
+
+		response, err := authService.Login(ctx, req)
+		if err != nil {
+			t.Errorf("Login() should succeed even with role service error, got: %v", err)
+			return
+		}
+
+		// Should get fallback role
+		claims, err := authService.ValidateAccessToken(response.AccessToken)
+		if err != nil {
+			t.Errorf("Failed to validate access token: %v", err)
+			return
+		}
+
+		if len(claims.Roles) != 1 || claims.Roles[0] != RoleVolunteer {
+			t.Errorf("Expected token to contain fallback VOLUNTEER role, got: %v", claims.Roles)
+		}
+
+		// Reset error state
+		userRoleService.SetError(false, "")
+	})
+}
+
+func TestAuthService_RefreshTokenWithRoles(t *testing.T) {
+	authService, userRepo, _, userRoleService := createTestAuthService(t)
+	ctx := context.Background()
+
+	// Create a test user
+	user := &User{
+		ID:                  "test-refresh-user-id",
+		Email:               "refresh@example.com",
+		Name:                "Test Refresh User",
+		EmailVerified:       false,
+		FailedLoginAttempts: 0,
+		CreatedAt:           time.Now(),
+		UpdatedAt:           time.Now(),
+	}
+
+	passwordService := NewPasswordService(12)
+	hashedPassword, _ := passwordService.HashPassword("TestPassword123!")
+	user.PasswordHash = &hashedPassword
+
+	userRepo.CreateUser(ctx, user)
+	userRoleService.SetUserRoles(ctx, user.ID, []string{RoleVolunteer}, user.ID)
+
+	// Login to get initial tokens
+	loginReq := &LoginRequest{
+		Email:    "refresh@example.com",
+		Password: "TestPassword123!",
+	}
+
+	loginResponse, err := authService.Login(ctx, loginReq)
+	if err != nil {
+		t.Fatalf("Failed to login: %v", err)
+	}
+
+	t.Run("token refresh retrieves updated roles", func(t *testing.T) {
+		// Update user roles
+		userRoleService.SetUserRoles(ctx, user.ID, []string{RoleOrganizer}, user.ID)
+
+		// Refresh token
+		refreshResponse, err := authService.RefreshToken(ctx, loginResponse.RefreshToken)
+		if err != nil {
+			t.Errorf("RefreshToken() error = %v, want nil", err)
+			return
+		}
+
+		// Validate the new access token contains updated roles
+		claims, err := authService.ValidateAccessToken(refreshResponse.AccessToken)
+		if err != nil {
+			t.Errorf("Failed to validate refreshed access token: %v", err)
+			return
+		}
+
+		if len(claims.Roles) != 1 || claims.Roles[0] != RoleOrganizer {
+			t.Errorf("Expected refreshed token to contain updated ORGANIZER role, got: %v", claims.Roles)
+		}
+	})
+
+	t.Run("token refresh with role service error uses existing roles", func(t *testing.T) {
+		// Get fresh tokens for this test
+		freshLoginResponse, err := authService.Login(ctx, loginReq)
+		if err != nil {
+			t.Fatalf("Failed to get fresh login tokens: %v", err)
+		}
+
+		// Set user role service to return error
+		userRoleService.SetError(true, "role service unavailable")
+
+		// Refresh token
+		refreshResponse, err := authService.RefreshToken(ctx, freshLoginResponse.RefreshToken)
+		if err != nil {
+			t.Errorf("RefreshToken() should succeed even with role service error, got: %v", err)
+			return
+		}
+
+		// Should use existing roles from the old token
+		claims, err := authService.ValidateAccessToken(refreshResponse.AccessToken)
+		if err != nil {
+			t.Errorf("Failed to validate access token: %v", err)
+			return
+		}
+
+		// Should have at least one role (fallback)
+		if len(claims.Roles) == 0 {
+			t.Error("Expected token to contain at least one role")
+		}
+
+		// Reset error state
+		userRoleService.SetError(false, "")
+	})
+}
+
+func TestValidateRole(t *testing.T) {
+	tests := []struct {
+		name     string
+		role     string
+		wantErr  bool
+		errorMsg string
+	}{
+		{
+			name:    "valid VOLUNTEER role",
+			role:    RoleVolunteer,
+			wantErr: false,
+		},
+		{
+			name:    "valid ORGANIZER role",
+			role:    RoleOrganizer,
+			wantErr: false,
+		},
+		{
+			name:    "empty role is allowed",
+			role:    "",
+			wantErr: false,
+		},
+		{
+			name:     "ADMIN role is not allowed for registration",
+			role:     RoleAdmin,
+			wantErr:  true,
+			errorMsg: "invalid role",
+		},
+		{
+			name:     "invalid role string",
+			role:     "INVALID_ROLE",
+			wantErr:  true,
+			errorMsg: "invalid role",
+		},
+		{
+			name:     "lowercase role not accepted",
+			role:     "volunteer",
+			wantErr:  true,
+			errorMsg: "invalid role",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateRole(tt.role)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateRole() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errorMsg != "" && !strings.Contains(err.Error(), tt.errorMsg) {
+				t.Errorf("ValidateRole() error = %v, want error containing %s", err, tt.errorMsg)
+			}
+		})
+	}
+}
+
+func TestIsValidRegistrationRole(t *testing.T) {
+	tests := []struct {
+		name string
+		role string
+		want bool
+	}{
+		{
+			name: "VOLUNTEER is valid",
+			role: RoleVolunteer,
+			want: true,
+		},
+		{
+			name: "ORGANIZER is valid",
+			role: RoleOrganizer,
+			want: true,
+		},
+		{
+			name: "empty role is valid",
+			role: "",
+			want: true,
+		},
+		{
+			name: "ADMIN is not valid for registration",
+			role: RoleAdmin,
+			want: false,
+		},
+		{
+			name: "invalid role is not valid",
+			role: "INVALID",
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsValidRegistrationRole(tt.role); got != tt.want {
+				t.Errorf("IsValidRegistrationRole() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
