@@ -1,5 +1,5 @@
 -- Phase 3: User Management - schema updates
--- NOTE: Using uuid-ossp's uuid_generate_v4() to match existing migrations
+-- NOTE: Using gen_random_uuid() for consistency with other migrations
 
 -- Enhanced users table
 ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;
@@ -24,14 +24,14 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
 
 -- Interest categories and interests
 CREATE TABLE IF NOT EXISTS interest_categories (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL UNIQUE,
     description TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS interests (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     category_id UUID NOT NULL REFERENCES interest_categories(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT,
@@ -52,7 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_user_interests_interest_id ON user_interests(inte
 
 -- User skills
 CREATE TABLE IF NOT EXISTS user_skills (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     proficiency TEXT NOT NULL CHECK (proficiency IN ('BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT')),
@@ -76,7 +76,7 @@ CREATE INDEX IF NOT EXISTS idx_user_roles_role ON user_roles(role);
 
 -- Activity logging
 CREATE TABLE IF NOT EXISTS user_activity_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     action TEXT NOT NULL,
     details JSONB,
@@ -89,7 +89,7 @@ CREATE INDEX IF NOT EXISTS idx_user_activity_created_at ON user_activity_logs(cr
 
 -- File uploads
 CREATE TABLE IF NOT EXISTS file_uploads (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     filename TEXT NOT NULL,
     original_name TEXT NOT NULL,

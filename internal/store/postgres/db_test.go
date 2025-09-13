@@ -90,7 +90,7 @@ func TestMigrateUp(t *testing.T) {
 			defer db.Close()
 
 			// Check that some expected tables exist
-			tables := []string{"users", "events", "event_registrations"}
+			tables := []string{"users", "events", "registrations"}
 			for _, table := range tables {
 				var exists bool
 				query := `SELECT EXISTS (
